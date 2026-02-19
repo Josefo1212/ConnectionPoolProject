@@ -4,7 +4,7 @@ public class PoolManager {
     private final Pool pool;
 
     public PoolManager() throws Exception {
-        pool = new Pool(); // Usa los datos del .env vía Config
+        pool = Pool.getInstance(); // Usa el singleton
     }
 
     public Connection getConnection() throws Exception {
