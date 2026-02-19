@@ -4,7 +4,7 @@ import java.sql.SQLException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-class Pool {
+class Pool implements ConnectionPool {
     private static Pool instance;
     private static final Object lock = new Object();
     private final ArrayBlockingQueue<Connection> connectionPool;
@@ -51,12 +51,14 @@ class Pool {
         return DriverManager.getConnection(dbUrl, dbUser, dbPassword);
     }
 
-    Connection getConnection() throws InterruptedException {
+    @Override
+    public Connection getConnection() throws InterruptedException {
         var timeout = Config.getLong("POOL_TIMEOUT");
         return connectionPool.poll(timeout, TimeUnit.MILLISECONDS);
     }
 
-    void releaseConnection(Connection connection) {
+    @Override
+    public void releaseConnection(Connection connection) {
         if (connection != null) {
             connectionPool.offer(connection);
         }

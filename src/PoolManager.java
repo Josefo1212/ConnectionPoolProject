@@ -1,10 +1,10 @@
 import java.sql.Connection;
 
 public class PoolManager {
-    private final Pool pool;
+    private final ConnectionPool pool;
 
     public PoolManager() throws Exception {
-        pool = Pool.getInstance(); // Usa el singleton
+        pool = Pool.getInstance(); // Usa la interfaz ConnectionPool
     }
 
     public Connection getConnection() throws Exception {
