@@ -1,8 +1,8 @@
-import java.sql.Connection;
-
 void main() {
     try {
-        var cliente = new Cliente(5); // Número de peticiones configurable
+        // Indique el número de peticiones que hará el cliente
+        var numeroPeticiones = 15000;
+        var cliente = new Cliente(numeroPeticiones);
         IO.println("--- Simulación SIN pool de conexiones ---");
         cliente.ejecutarSinPool();
         IO.println("\n--- Simulación CON pool de conexiones ---");
