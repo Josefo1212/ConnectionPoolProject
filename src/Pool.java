@@ -5,17 +5,17 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class Pool {
-    private final ArrayBlockingQueue<Connection> connectionPool;
+    private final ArrayBlockingQueue<Connection> connectionPool; // Especificar el tipo genérico explícitamente
     private final String dbUrl;
     private final String dbUser;
     private final String dbPassword;
 
     public Pool() throws SQLException {
         this(
-            "jdbc:" + Config.get("DB_DIALECT") + "://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
-            Config.get("DB_USER"),
-            Config.get("DB_PASSWORD"),
-            Config.getInt("POOL_SIZE")
+                "jdbc:" + Config.get("DB_DIALECT") + "://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
+                Config.get("DB_USER"),
+                Config.get("DB_PASSWORD"),
+                Config.getInt("POOL_SIZE")
         ); // Construye la URL dinámicamente desde el .env
     }
 
