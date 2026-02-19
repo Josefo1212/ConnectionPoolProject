@@ -12,7 +12,7 @@ public class Pool {
 
     public Pool() throws SQLException {
         this(
-                "jdbc:" + Config.get("DB_DIALECT") + "://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
+                "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
                 Config.get("DB_USER"),
                 Config.get("DB_PASSWORD"),
                 Config.getInt("POOL_SIZE")
@@ -28,7 +28,11 @@ public class Pool {
         this.dbUser = dbUser;
         this.dbPassword = dbPassword;
         this.connectionPool = new ArrayBlockingQueue<>(poolSize);
-
+        try {
+            Class.forName("org.postgresql.Driver"); // Carga explícita del driver
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("No se encontró el driver de PostgreSQL", e);
+        }
         for (int i = 0; i < poolSize; i++) {
             connectionPool.add(createConnection());
         }
