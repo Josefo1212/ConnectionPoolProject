@@ -2,6 +2,8 @@ import java.sql.DriverManager;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import javafx.application.Platform;
 import javafx.scene.control.TextArea;
 
@@ -10,6 +12,10 @@ public class Cliente {
     private static final AtomicBoolean freno = new AtomicBoolean(false);
     private TextArea outputArea;
     private final ConcurrentLinkedQueue<String> mensajes = new ConcurrentLinkedQueue<>();
+    private ConcurrentLinkedQueue<EstadisticaManager.Peticion> colaEstadisticas;
+    private static final int MAX_THREADS = 100;
+    private ExecutorService executor = Executors.newFixedThreadPool(MAX_THREADS);
+    private static final int MAX_MENSAJES = 200;
 
     public Cliente(int numeroPeticiones) {
         this.numeroPeticiones = numeroPeticiones;
@@ -30,12 +36,14 @@ public class Cliente {
                 while (!estaFrenado()) {
                     if (!mensajes.isEmpty() && outputArea != null) {
                         Platform.runLater(() -> {
+                            var buffer = new StringBuilder();
                             while (!mensajes.isEmpty()) {
-                                outputArea.appendText(mensajes.poll() + "\n");
+                                buffer.append(mensajes.poll()).append("\n");
                             }
+                            outputArea.appendText(buffer.toString());
                         });
                     }
-                    try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+                    try { Thread.sleep(200); } catch (InterruptedException ignored) {}
                 }
             });
             hilo.setDaemon(true);
@@ -43,14 +51,16 @@ public class Cliente {
         });
     }
 
-    public static void activarFreno() {
-        freno.set(true);
+    // Métodos de estadísticas y freno
+    public static void activarFreno(boolean estado) {
+        freno.set(estado);
     }
-
+    public static void activarFreno() {
+        activarFreno(true);
+    }
     public static boolean estaFrenado() {
         return freno.get();
     }
-
     Thread escucharFreno() {
         var t = new Thread(() -> {
             try {
@@ -72,117 +82,30 @@ public class Cliente {
         return t;
     }
 
-    public void ejecutarSinPool() {
-        freno.set(false);
+    // Métodos principales de simulación con estadísticas
+    public void setEstadisticaQueue(ConcurrentLinkedQueue<EstadisticaManager.Peticion> queue) {
+        this.colaEstadisticas = queue;
+    }
+
+    public void ejecutarSinPoolConEstadisticas() {
+        activarFreno(false);
         var frenoThread = escucharFreno();
         var inicio = System.currentTimeMillis();
-        var hilos = new Thread[numeroPeticiones];
+        var tareas = new java.util.ArrayList<java.util.concurrent.Future<?>>();
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
-            hilos[i] = new Thread(() -> {
-                if (estaFrenado()) return;
+            tareas.add(executor.submit(() -> {
+                boolean resultadoReportado = false;
                 try (var connection = DriverManager.getConnection(
                         "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
                         Config.get("DB_USER"),
                         Config.get("DB_PASSWORD")
                 )) {
-                    if (estaFrenado()) return;
-                    try (var stmt = connection.createStatement()) {
-                        var rs = stmt.executeQuery("SELECT * FROM usuario LIMIT 1");
-                        while (rs.next() && !estaFrenado()) {
-                            print("[Sin pool] Petición " + idx + ": usuario = " + rs.getString(1));
-                        }
-                    }
-                    Thread.sleep(new Random().nextInt(500));
-                } catch (Exception e) {
-                    print("Error en el cliente (sin pool), petición " + idx + ": " + e.getMessage());
-                }
-            });
-            hilos[i].start();
-        }
-        for (var hilo : hilos) {
-            try { hilo.join(); } catch (InterruptedException ignored) {}
-        }
-        freno.set(true);
-        try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
-        var fin = System.currentTimeMillis();
-        print("Tiempo total sin pool: " + (fin - inicio) + " ms");
-    }
-
-    public void ejecutarConPool() {
-        freno.set(false);
-        var frenoThread = escucharFreno();
-        var inicio = System.currentTimeMillis();
-        var hilos = new Thread[numeroPeticiones];
-        for (var i = 0; i < numeroPeticiones; i++) {
-            final var idx = i + 1;
-            hilos[i] = new Thread(() -> {
-                if (estaFrenado()) return;
-                try {
-                    var poolManager = new PoolManager();
-                    if (estaFrenado()) return;
-                    var connection = poolManager.getConnection();
                     if (estaFrenado()) {
-                        if (connection != null) poolManager.releaseConnection(connection);
+                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
+                        resultadoReportado = true;
                         return;
                     }
-                    if (connection != null) {
-                        try (var stmt = connection.createStatement()) {
-                            var rs = stmt.executeQuery("SELECT * FROM usuario LIMIT 1");
-                            while (rs.next() && !estaFrenado()) {
-                                print("[Con pool] Petición " + idx + ": usuario = " + rs.getString(1));
-                            }
-                        } finally {
-                            poolManager.releaseConnection(connection);
-                        }
-                        Thread.sleep(new Random().nextInt(500));
-                    } else if (!estaFrenado()) {
-                        print("No se pudo obtener una conexión del pool en la petición " + idx);
-                    }
-                } catch (Exception e) {
-                    print("Error en el cliente (con pool), petición " + idx + ": " + e.getMessage());
-                }
-            });
-            hilos[i].start();
-        }
-        for (var hilo : hilos) {
-            try { hilo.join(); } catch (InterruptedException ignored) {}
-        }
-        freno.set(true);
-        try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
-        var fin = System.currentTimeMillis();
-        print("Tiempo total con pool: " + (fin - inicio) + " ms");
-    }
-
-    public static class Estadisticas {
-        public int exitosas = 0;
-        public int fallidas = 0;
-        public int total = 0;
-        public double porcentajeExito() {
-            return total == 0 ? 0 : (exitosas * 100.0 / total);
-        }
-        public double porcentajeFallo() {
-            return total == 0 ? 0 : (fallidas * 100.0 / total);
-        }
-    }
-
-    public Estadisticas ejecutarSinPoolConEstadisticas() {
-        freno.set(false);
-        var frenoThread = escucharFreno();
-        var inicio = System.currentTimeMillis();
-        var hilos = new Thread[numeroPeticiones];
-        var stats = new Estadisticas();
-        stats.total = numeroPeticiones;
-        for (var i = 0; i < numeroPeticiones; i++) {
-            final var idx = i + 1;
-            hilos[i] = new Thread(() -> {
-                if (estaFrenado()) return;
-                try (var connection = DriverManager.getConnection(
-                        "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
-                        Config.get("DB_USER"),
-                        Config.get("DB_PASSWORD")
-                )) {
-                    if (estaFrenado()) return;
                     try (var stmt = connection.createStatement()) {
                         var rs = stmt.executeQuery("SELECT * FROM usuario LIMIT 1");
                         boolean exito = false;
@@ -190,44 +113,51 @@ public class Cliente {
                             exito = true;
                             print("[Sin pool] Petición " + idx + ": usuario = " + rs.getString(1));
                         }
-                        if (exito) stats.exitosas++;
-                        else stats.fallidas++;
+                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
+                        resultadoReportado = true;
                     }
                     Thread.sleep(new Random().nextInt(500));
                 } catch (Exception e) {
-                    stats.fallidas++;
+                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
+                    resultadoReportado = true;
                     print("Error en el cliente (sin pool), petición " + idx + ": " + e.getMessage());
+                } finally {
+                    if (!resultadoReportado && colaEstadisticas != null) {
+                        colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada (final)"));
+                    }
                 }
-            });
-            hilos[i].start();
+            }));
         }
-        for (var hilo : hilos) {
-            try { hilo.join(); } catch (InterruptedException ignored) {}
+        for (var tarea : tareas) {
+            try { tarea.get(); } catch (Exception ignored) {}
         }
-        freno.set(true);
+        activarFreno(true);
         try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
         var fin = System.currentTimeMillis();
         print("Tiempo total sin pool: " + (fin - inicio) + " ms");
-        return stats;
     }
 
-    public Estadisticas ejecutarConPoolConEstadisticas() {
-        freno.set(false);
+    public void ejecutarConPoolConEstadisticas() {
+        activarFreno(false);
         var frenoThread = escucharFreno();
         var inicio = System.currentTimeMillis();
-        var hilos = new Thread[numeroPeticiones];
-        var stats = new Estadisticas();
-        stats.total = numeroPeticiones;
+        var tareas = new java.util.ArrayList<java.util.concurrent.Future<?>>();
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
-            hilos[i] = new Thread(() -> {
-                if (estaFrenado()) return;
+            tareas.add(executor.submit(() -> {
+                boolean resultadoReportado = false;
                 try {
                     var poolManager = new PoolManager();
-                    if (estaFrenado()) return;
+                    if (estaFrenado()) {
+                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
+                        resultadoReportado = true;
+                        return;
+                    }
                     var connection = poolManager.getConnection();
                     if (estaFrenado()) {
                         if (connection != null) poolManager.releaseConnection(connection);
+                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
+                        resultadoReportado = true;
                         return;
                     }
                     if (connection != null) {
@@ -238,30 +168,34 @@ public class Cliente {
                                 exito = true;
                                 print("[Con pool] Petición " + idx + ": usuario = " + rs.getString(1));
                             }
-                            if (exito) stats.exitosas++;
-                            else stats.fallidas++;
+                            if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
+                            resultadoReportado = true;
                         } finally {
                             poolManager.releaseConnection(connection);
                         }
                         Thread.sleep(new Random().nextInt(500));
                     } else if (!estaFrenado()) {
-                        stats.fallidas++;
+                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "No se pudo obtener conexión"));
+                        resultadoReportado = true;
                         print("No se pudo obtener una conexión del pool en la petición " + idx);
                     }
                 } catch (Exception e) {
-                    stats.fallidas++;
+                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
+                    resultadoReportado = true;
                     print("Error en el cliente (con pool), petición " + idx + ": " + e.getMessage());
+                } finally {
+                    if (!resultadoReportado && colaEstadisticas != null) {
+                        colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada (final)"));
+                    }
                 }
-            });
-            hilos[i].start();
+            }));
         }
-        for (var hilo : hilos) {
-            try { hilo.join(); } catch (InterruptedException ignored) {}
+        for (var tarea : tareas) {
+            try { tarea.get(); } catch (Exception ignored) {}
         }
-        freno.set(true);
+        activarFreno(true);
         try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
         var fin = System.currentTimeMillis();
         print("Tiempo total con pool: " + (fin - inicio) + " ms");
-        return stats;
     }
 }
