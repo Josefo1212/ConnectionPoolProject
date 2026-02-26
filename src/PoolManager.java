@@ -5,7 +5,7 @@ public class PoolManager {
     private final ConnectionPool pool;
 
     private PoolManager() {
-        pool = new DefaultConnectionPool(); // Usar implementación concreta
+        pool = new DefaultConnectionPool();
     }
 
     public static synchronized PoolManager getInstance() {

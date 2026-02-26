@@ -11,37 +11,24 @@ public class Cliente {
     private static final AtomicBoolean freno = new AtomicBoolean(false);
     private TextArea outputArea;
     private ConcurrentLinkedQueue<EstadisticaManager.Peticion> colaEstadisticas;
-
-    // Progreso
-    private final AtomicInteger enProgreso = new AtomicInteger(0);
     private final AtomicInteger completadas = new AtomicInteger(0);
     private final AtomicInteger exitosas = new AtomicInteger(0);
     private final AtomicInteger fallidas = new AtomicInteger(0);
-    private PoolManager poolManager; // Para uso compartido en la tanda con pool
+    private PoolManager poolManager;
 
     public Cliente(int numeroPeticiones) {
         this.numeroPeticiones = numeroPeticiones;
     }
 
-    public void setOutput(TextArea area) {
-        this.outputArea = area;
-    }
+    public void setOutput(TextArea area) { this.outputArea = area; }
+    public void setEstadisticaQueue(ConcurrentLinkedQueue<EstadisticaManager.Peticion> queue) { this.colaEstadisticas = queue; }
+    public int getCompletadas() { return completadas.get(); }
 
-    public void setPoolManager(PoolManager poolManager) {
-        this.poolManager = poolManager;
-    }
+    public static void activarFreno(boolean estado) { freno.set(estado); }
+    public static void activarFreno() { activarFreno(true); }
+    public static boolean estaFrenado() { return freno.get(); }
 
-    // Métodos de estadísticas y freno
-    public static void activarFreno(boolean estado) {
-        freno.set(estado);
-    }
-    public static void activarFreno() {
-        activarFreno(true);
-    }
-    public static boolean estaFrenado() {
-        return freno.get();
-    }
-    Thread escucharFreno() {
+    private Thread escucharFreno() {
         var t = new Thread(() -> {
             try {
                 while (!estaFrenado()) {
@@ -61,16 +48,9 @@ public class Cliente {
         return t;
     }
 
-    public int getCompletadas() { return completadas.get(); }
-
-    public void setEstadisticaQueue(ConcurrentLinkedQueue<EstadisticaManager.Peticion> queue) {
-        this.colaEstadisticas = queue;
-    }
-
     public void ejecutarSinPoolConEstadisticas() {
         activarFreno(false);
         var frenoThread = escucharFreno();
-        enProgreso.set(0);
         completadas.set(0);
         exitosas.set(0);
         fallidas.set(0);
@@ -79,7 +59,6 @@ public class Cliente {
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
             Thread t = new Thread(() -> {
-                enProgreso.incrementAndGet();
                 boolean exito = false;
                 try (var connection = DriverManager.getConnection(
                         "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
@@ -105,7 +84,6 @@ public class Cliente {
                     if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
                     fallidas.incrementAndGet();
                 } finally {
-                    enProgreso.decrementAndGet();
                     completadas.incrementAndGet();
                 }
             });
@@ -124,7 +102,6 @@ public class Cliente {
     public void ejecutarConPoolConEstadisticas() {
         activarFreno(false);
         var frenoThread = escucharFreno();
-        enProgreso.set(0);
         completadas.set(0);
         exitosas.set(0);
         fallidas.set(0);
@@ -133,10 +110,8 @@ public class Cliente {
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
             Thread t = new Thread(() -> {
-                enProgreso.incrementAndGet();
                 boolean exito = false;
                 try {
-                    // Usar el poolManager compartido
                     if (poolManager == null) poolManager = PoolManager.getInstance();
                     if (estaFrenado()) {
                         if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
@@ -171,7 +146,6 @@ public class Cliente {
                     if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
                     fallidas.incrementAndGet();
                 } finally {
-                    enProgreso.decrementAndGet();
                     completadas.incrementAndGet();
                 }
             });
