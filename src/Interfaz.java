@@ -139,6 +139,8 @@ public class Interfaz extends Application {
         // Instancia de la gráfica
         var grafica = new GraficaEstadisticas();
         grafica.setVisible(false);
+        grafica.setPrefHeight(320);
+        grafica.setMaxHeight(320);
 
         // Layout principal reorganizado
         var mainBox = new VBox(
@@ -148,8 +150,8 @@ public class Interfaz extends Application {
             statsBox,
             grafica
         );
-        mainBox.setSpacing(30);
-        mainBox.setStyle("-fx-alignment: center;");
+        mainBox.setSpacing(20);
+        mainBox.setStyle("-fx-alignment: center; -fx-padding: 20 0 0 0;");
         var scene = new Scene(mainBox, 900, 700);
 
         // Escribir el CSS en un archivo temporal y cargarlo
@@ -174,6 +176,7 @@ public class Interfaz extends Application {
                 progressBarSinPool.setProgress(0);
                 progressBarConPool.setProgress(0);
                 grafica.setVisible(false);
+                statsBox.setVisible(true);
             });
             new Thread(() -> {
                 Cliente.activarFreno(false);
@@ -197,8 +200,10 @@ public class Interfaz extends Application {
                         Platform.runLater(() -> {
                             progressBarSinPool.setProgress(progreso);
                             progresoSinPool.setText("Completadas: " + completadas + " | Faltantes: " + faltantes);
+                            statsBox.setVisible(true);
+                            grafica.setVisible(false);
                         });
-                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+                        try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                     }
                     Platform.runLater(() -> progressBarSinPool.setProgress(1.0));
                 });
@@ -234,8 +239,10 @@ public class Interfaz extends Application {
                         Platform.runLater(() -> {
                             progressBarConPool.setProgress(progreso);
                             progresoConPool.setText("Completadas: " + completadas + " | Faltantes: " + faltantes);
+                            statsBox.setVisible(true);
+                            grafica.setVisible(false);
                         });
-                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+                        try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                     }
                     Platform.runLater(() -> progressBarConPool.setProgress(1.0));
                 });
