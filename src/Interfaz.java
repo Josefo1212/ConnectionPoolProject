@@ -35,7 +35,7 @@ public class Interfaz extends Application {
         peticionesBox.setSpacing(10);
         var layout = new VBox(titulo, peticionesBox, controls, statsBox);
         layout.setSpacing(15);
-        var scene = new Scene(layout, 600, 400);
+        layout.setStyle("-fx-alignment: center; -fx-padding: 30 0 0 0;");
         // CSS embebido mejorado y suavizado
         var css = """
             .root {
@@ -136,6 +136,22 @@ public class Interfaz extends Application {
         controls.setStyle("-fx-alignment: center;");
         peticionesBox.setStyle("-fx-alignment: center;");
 
+        // Instancia de la gráfica
+        var grafica = new GraficaEstadisticas();
+        grafica.setVisible(false);
+
+        // Layout principal reorganizado
+        var mainBox = new VBox(
+            titulo,
+            peticionesBox,
+            controls,
+            statsBox,
+            grafica
+        );
+        mainBox.setSpacing(30);
+        mainBox.setStyle("-fx-alignment: center;");
+        var scene = new Scene(mainBox, 900, 700);
+
         // Escribir el CSS en un archivo temporal y cargarlo
         try {
             java.nio.file.Path tempCss = java.nio.file.Files.createTempFile("estilo", ".css");
@@ -148,8 +164,8 @@ public class Interfaz extends Application {
         stage.setTitle("Pool de Conexiones - Simulación");
         stage.show();
 
+
         btnSimular.setOnAction(_ -> {
-            // Limpiar estadísticas y progreso antes de iniciar
             Platform.runLater(() -> {
                 statsSinPool.setText("");
                 statsConPool.setText("");
@@ -157,6 +173,7 @@ public class Interfaz extends Application {
                 progresoConPool.setText("");
                 progressBarSinPool.setProgress(0);
                 progressBarConPool.setProgress(0);
+                grafica.setVisible(false);
             });
             new Thread(() -> {
                 Cliente.activarFreno(false);
@@ -238,6 +255,16 @@ public class Interfaz extends Application {
                         String.format("%.2f", falloPct) + "% fallo"
                     );
                     progresoConPool.setText("");
+                });
+                // Al terminar ambas tandas, mostrar la gráfica
+                Platform.runLater(() -> {
+                    grafica.mostrarResultados(
+                        managerSin.getExitosas(),
+                        managerSin.getFallidas(),
+                        managerCon.getExitosas(),
+                        managerCon.getFallidas()
+                    );
+                    grafica.setVisible(true);
                 });
             }).start();
         });
