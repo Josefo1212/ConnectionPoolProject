@@ -1,5 +1,7 @@
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -7,7 +9,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextField;
-import javafx.scene.control.Separator;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
@@ -15,8 +16,16 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 public class Interfaz extends Application {
     private final VBox panelGrafica = new VBox();
+    private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private DoubleProperty progresoSinPoolProp = new SimpleDoubleProperty(0);
+    private DoubleProperty progresoConPoolProp = new SimpleDoubleProperty(0);
     @Override
     public void start(Stage stage) {
         // Título
@@ -59,14 +68,16 @@ public class Interfaz extends Application {
         statsConPool.setFont(Font.font("Segoe UI", 13));
         statsConPool.setTextFill(Color.web("#e0e0f0"));
         statsConPool.setAlignment(Pos.CENTER);
-        var progressBarSinPool = new ProgressBar(0);
+        var progressBarSinPool = new ProgressBar();
         progressBarSinPool.setPrefWidth(600);
         progressBarSinPool.setPrefHeight(16);
-        // No setStyle, no id, no clase
-        var progressBarConPool = new ProgressBar(0);
+        progressBarSinPool.progressProperty().bind(progresoSinPoolProp);
+        progressBarSinPool.setStyle("-fx-progress-color: #a88ff0;");
+        var progressBarConPool = new ProgressBar();
         progressBarConPool.setPrefWidth(600);
         progressBarConPool.setPrefHeight(16);
-        // No setStyle, no id, no clase
+        progressBarConPool.progressProperty().bind(progresoConPoolProp);
+        progressBarConPool.setStyle("-fx-progress-color: #a88ff0;");
         var progresoSinPool = new Label();
         progresoSinPool.setFont(Font.font("Segoe UI", 12));
         progresoSinPool.setTextFill(Color.web("#b6aaff"));
@@ -127,7 +138,6 @@ public class Interfaz extends Application {
                 -fx-background-color: linear-gradient(to bottom, #23243a 0%, #2d2e4a 100%);
                 -fx-font-family: 'Segoe UI', 'Arial', sans-serif;
             }
-            /* NO hay reglas para ProgressBar ni .bar ni nada similar */
             .titulo {
                 -fx-font-size: 24px;
                 -fx-text-fill: #a88ff0;
@@ -196,7 +206,6 @@ public class Interfaz extends Application {
                 -fx-alignment: center;
             }
          """;
-        // Escribir el CSS en un archivo temporal y cargarlo
         try {
             java.nio.file.Path tempCss = java.nio.file.Files.createTempFile("estilo", ".css");
             java.nio.file.Files.writeString(tempCss, css);
@@ -211,8 +220,8 @@ public class Interfaz extends Application {
                 statsConPool.setText("");
                 progresoSinPool.setText("");
                 progresoConPool.setText("");
-                progressBarSinPool.setProgress(0);
-                progressBarConPool.setProgress(0);
+                progresoSinPoolProp.set(0);
+                progresoConPoolProp.set(0);
                 panelGrafica.getChildren().clear();
                 panelGrafica.setVisible(false);
                 statsBox.setVisible(true);
@@ -230,35 +239,31 @@ public class Interfaz extends Application {
                 var hiloSin = new Thread(managerSin);
                 var cliente = new Cliente(num);
                 cliente.setEstadisticaQueue(colaSin);
-                // Hilo de progreso robusto y seguro
-                final Object lockSin = new Object();
                 final boolean[] terminadoSinPool = {false};
-                Thread actualizador = new Thread(() -> {
-                    while (true) {
-                        int completadas = cliente.getCompletadas();
-                        double progreso = completadas / (double) num;
-                        int faltantes = num - completadas;
-                        Platform.runLater(() -> {
-                            progressBarSinPool.setProgress(Math.min(progreso, 1.0));
-                            progresoSinPool.setText("Sin pool: " + completadas + " completadas | " + faltantes + " faltantes");
-                        });
-                        if (completadas >= num || Cliente.estaFrenado()) break;
-                        try { Thread.sleep(40); } catch (InterruptedException ignored) {}
-                    }
+                final ScheduledFuture<?>[] futureSin = new ScheduledFuture<?>[1];
+                futureSin[0] = scheduler.scheduleAtFixedRate(() -> {
+                    int completadas = cliente.getCompletadas();
+                    double progreso = completadas / (double) num;
                     Platform.runLater(() -> {
-                        progressBarSinPool.setProgress(1.0);
-                        progresoSinPool.setText("Sin pool: " + cliente.getCompletadas() + " completadas | 0 faltantes");
+                        progresoSinPoolProp.set(Math.min(progreso, 1.0));
+                        progresoSinPool.setText("Sin pool: " + completadas + " completadas | " + (num - completadas) + " faltantes");
                     });
-                    synchronized (lockSin) { terminadoSinPool[0] = true; lockSin.notifyAll(); }
-                });
-                actualizador.setDaemon(true);
-                actualizador.start();
+                    if (completadas >= num || Cliente.estaFrenado()) {
+                        Platform.runLater(() -> {
+                            progresoSinPoolProp.set(1.0);
+                            progresoSinPool.setText("Sin pool: " + cliente.getCompletadas() + " completadas | 0 faltantes");
+                        });
+                        terminadoSinPool[0] = true;
+                        if (futureSin[0] != null) futureSin[0].cancel(false);
+                    }
+                }, 0, 40, TimeUnit.MILLISECONDS);
                 hiloSin.start();
                 cliente.ejecutarSinPoolConEstadisticas();
                 managerSin.stop();
                 try { hiloSin.join(); } catch (InterruptedException ignored) {}
-                // Esperar a que el hilo de progreso termine
-                synchronized (lockSin) { while (!terminadoSinPool[0]) { try { lockSin.wait(); } catch (InterruptedException ignored) {} } }
+                while (!terminadoSinPool[0]) {
+                    try { Thread.sleep(40); } catch (InterruptedException ignored) {}
+                }
                 Platform.runLater(() -> {
                     int exitosas = managerSin.getExitosas();
                     int fallidas = managerSin.getFallidas();
@@ -277,34 +282,31 @@ public class Interfaz extends Application {
                 var hiloCon = new Thread(managerCon);
                 var clientePool = new Cliente(num);
                 clientePool.setEstadisticaQueue(colaCon);
-                final Object lockCon = new Object();
                 final boolean[] terminadoConPool = {false};
-                Thread actualizador2 = new Thread(() -> {
-                    while (true) {
-                        int completadas = clientePool.getCompletadas();
-                        double progreso = completadas / (double) num;
-                        int faltantes = num - completadas;
-                        Platform.runLater(() -> {
-                            progressBarConPool.setProgress(Math.min(progreso, 1.0));
-                            progresoConPool.setText("Con pool: " + completadas + " completadas | " + faltantes + " faltantes");
-                        });
-                        if (completadas >= num || Cliente.estaFrenado()) break;
-                        try { Thread.sleep(40); } catch (InterruptedException ignored) {}
-                    }
+                final ScheduledFuture<?>[] futureCon = new ScheduledFuture<?>[1];
+                futureCon[0] = scheduler.scheduleAtFixedRate(() -> {
+                    int completadas = clientePool.getCompletadas();
+                    double progreso = completadas / (double) num;
                     Platform.runLater(() -> {
-                        progressBarConPool.setProgress(1.0);
-                        progresoConPool.setText("Con pool: " + clientePool.getCompletadas() + " completadas | 0 faltantes");
+                        progresoConPoolProp.set(Math.min(progreso, 1.0));
+                        progresoConPool.setText("Con pool: " + completadas + " completadas | " + (num - completadas) + " faltantes");
                     });
-                    synchronized (lockCon) { terminadoConPool[0] = true; lockCon.notifyAll(); }
-                });
-                actualizador2.setDaemon(true);
-                actualizador2.start();
+                    if (completadas >= num || Cliente.estaFrenado()) {
+                        Platform.runLater(() -> {
+                            progresoConPoolProp.set(1.0);
+                            progresoConPool.setText("Con pool: " + clientePool.getCompletadas() + " completadas | 0 faltantes");
+                        });
+                        terminadoConPool[0] = true;
+                        if (futureCon[0] != null) futureCon[0].cancel(false);
+                    }
+                }, 0, 40, TimeUnit.MILLISECONDS);
                 hiloCon.start();
                 clientePool.ejecutarConPoolConEstadisticas();
                 managerCon.stop();
                 try { hiloCon.join(); } catch (InterruptedException ignored) {}
-                // Esperar a que el hilo de progreso termine
-                synchronized (lockCon) { while (!terminadoConPool[0]) { try { lockCon.wait(); } catch (InterruptedException ignored) {} } }
+                while (!terminadoConPool[0]) {
+                    try { Thread.sleep(40); } catch (InterruptedException ignored) {}
+                }
                 Platform.runLater(() -> {
                     int exitosas = managerCon.getExitosas();
                     int fallidas = managerCon.getFallidas();
@@ -317,7 +319,6 @@ public class Interfaz extends Application {
                     );
                     progresoConPool.setText("");
                 });
-                // Al terminar ambas tandas, mostrar la gráfica
                 Platform.runLater(() -> {
                     mostrarGraficaEstadisticas(
                         managerSin.getExitosas(),

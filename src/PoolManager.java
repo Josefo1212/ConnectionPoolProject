@@ -5,7 +5,11 @@ public class PoolManager {
     private final ConnectionPool pool;
 
     private PoolManager() {
-        pool = new DefaultConnectionPool();
+        try {
+            pool = Pool.getInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo inicializar el pool de conexiones", e);
+        }
     }
 
     public static synchronized PoolManager getInstance() {
