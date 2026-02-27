@@ -1,56 +1,142 @@
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Separator;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 
 public class Interfaz extends Application {
+    private final VBox panelGrafica = new VBox();
     @Override
     public void start(Stage stage) {
-        var btnSimular = new Button("Iniciar simulación");
-        var btnFreno = new Button("Freno de emergencia");
+        // Título
+        var titulo = new Label("Simulación de Pool de Conexiones");
+        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
+        titulo.setTextFill(Color.web("#a88ff0"));
+        titulo.setAlignment(Pos.CENTER);
+        titulo.setPadding(new Insets(0, 0, 10, 0));
+        // Campo de peticiones
         var lblPeticiones = new Label("Número de peticiones:");
+        lblPeticiones.setFont(Font.font("Segoe UI", FontWeight.BOLD, 15));
+        lblPeticiones.setTextFill(Color.web("#a88ff0"));
         var txtPeticiones = new TextField();
-        var statsBox = new VBox();
-        var statsLabel = new Label("Estadísticas");
-        var statsSinPool = new Label();
-        var statsConPool = new Label();
-        var progressBarSinPool = new ProgressBar(0);
-        progressBarSinPool.setPrefWidth(400);
-        var progressBarConPool = new ProgressBar(0);
-        progressBarConPool.setPrefWidth(400);
-        var progresoSinPool = new Label();
-        var progresoConPool = new Label();
-        statsBox.getChildren().addAll(statsLabel, progressBarSinPool, progresoSinPool, statsSinPool, progressBarConPool, progresoConPool, statsConPool);
-
-        var titulo = new Label("Pool de Conexiones - Simulación");
-        var controls = new HBox(btnSimular, btnFreno);
-        controls.setSpacing(15);
+        txtPeticiones.setFont(Font.font("Segoe UI", 14));
+        txtPeticiones.setPrefWidth(140);
+        txtPeticiones.setStyle("-fx-background-color: #292a3a; -fx-text-fill: #e0e0f0; -fx-border-color: #a88ff0; -fx-border-radius: 10; -fx-background-radius: 10; -fx-padding: 6 10 6 10;");
         var peticionesBox = new HBox(lblPeticiones, txtPeticiones);
         peticionesBox.setSpacing(10);
-        var layout = new VBox(titulo, peticionesBox, controls, statsBox);
-        layout.setSpacing(15);
-        layout.setStyle("-fx-alignment: center; -fx-padding: 30 0 0 0;");
+        peticionesBox.setAlignment(Pos.CENTER);
+        // Botones
+        var btnSimular = new Button("Iniciar simulación");
+        btnSimular.setFont(Font.font("Segoe UI", FontWeight.BOLD, 15));
+        btnSimular.setStyle("-fx-background-color: linear-gradient(to bottom, #a88ff0 0%, #7c6ee6 100%); -fx-text-fill: #23243a; -fx-background-radius: 10; -fx-border-radius: 10; -fx-padding: 10 28 10 28;");
+        var btnFreno = new Button("Freno de emergencia");
+        btnFreno.setFont(Font.font("Segoe UI", FontWeight.BOLD, 15));
+        btnFreno.setStyle("-fx-background-color: linear-gradient(to bottom, #ff4e8e 0%, #a88ff0 100%); -fx-text-fill: #23243a; -fx-background-radius: 10; -fx-border-radius: 10; -fx-padding: 10 28 10 28;");
+        var controls = new HBox(btnSimular, btnFreno);
+        controls.setSpacing(15);
+        controls.setAlignment(Pos.CENTER);
+        // Estadísticas y progreso
+        var statsLabel = new Label("Estadísticas");
+        statsLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
+        statsLabel.setTextFill(Color.web("#a88ff0"));
+        statsLabel.setAlignment(Pos.CENTER);
+        var statsSinPool = new Label();
+        statsSinPool.setFont(Font.font("Segoe UI", 13));
+        statsSinPool.setTextFill(Color.web("#e0e0f0"));
+        statsSinPool.setAlignment(Pos.CENTER);
+        var statsConPool = new Label();
+        statsConPool.setFont(Font.font("Segoe UI", 13));
+        statsConPool.setTextFill(Color.web("#e0e0f0"));
+        statsConPool.setAlignment(Pos.CENTER);
+        var progressBarSinPool = new ProgressBar(0);
+        progressBarSinPool.setPrefWidth(600);
+        progressBarSinPool.setPrefHeight(16);
+        // No setStyle, no id, no clase
+        var progressBarConPool = new ProgressBar(0);
+        progressBarConPool.setPrefWidth(600);
+        progressBarConPool.setPrefHeight(16);
+        // No setStyle, no id, no clase
+        var progresoSinPool = new Label();
+        progresoSinPool.setFont(Font.font("Segoe UI", 12));
+        progresoSinPool.setTextFill(Color.web("#b6aaff"));
+        progresoSinPool.setAlignment(Pos.CENTER);
+        var progresoConPool = new Label();
+        progresoConPool.setFont(Font.font("Segoe UI", 12));
+        progresoConPool.setTextFill(Color.web("#b6aaff"));
+        progresoConPool.setAlignment(Pos.CENTER);
+        // Caja de estadísticas
+        var statsBox = new VBox(
+            statsLabel,
+            progressBarSinPool, progresoSinPool, statsSinPool,
+            progressBarConPool, progresoConPool, statsConPool
+        );
+        statsBox.setSpacing(5);
+        statsBox.setPadding(new Insets(10));
+        statsBox.setStyle("-fx-background-color: #23243a; -fx-border-radius: 14; -fx-background-radius: 14; -fx-effect: dropshadow(gaussian, #a88ff0, 8, 0.2, 0, 2);");
+        statsBox.setAlignment(Pos.CENTER);
+        // Panel para la gráfica
+        panelGrafica.setStyle("-fx-alignment: center;");
+        panelGrafica.setMinHeight(180);
+        panelGrafica.setMaxHeight(220);
+        panelGrafica.setPrefHeight(200);
+        panelGrafica.setVisible(false);
+        // Leyenda de colores para gráficas
+        var leyenda = new HBox();
+        var exitoColor = new Label("  ");
+        exitoColor.setStyle("-fx-background-color: #2196f3; -fx-min-width: 22px; -fx-min-height: 16px; -fx-max-width: 22px; -fx-max-height: 16px; -fx-border-radius: 6; -fx-background-radius: 6;");
+        var exitoText = new Label("Exitosas");
+        exitoText.setTextFill(Color.web("#2196f3"));
+        var falloColor = new Label("  ");
+        falloColor.setStyle("-fx-background-color: #e53935; -fx-min-width: 22px; -fx-min-height: 16px; -fx-max-width: 22px; -fx-max-height: 16px; -fx-border-radius: 6; -fx-background-radius: 6;");
+        var falloText = new Label("Fallidas");
+        falloText.setTextFill(Color.web("#e53935"));
+        leyenda.setSpacing(12);
+        leyenda.setAlignment(Pos.CENTER);
+        leyenda.getChildren().addAll(exitoColor, exitoText, falloColor, falloText);
+        // Ajuste de tamaño y disposición visual
+        panelGrafica.setMinHeight(180);
+        panelGrafica.setMaxHeight(220);
+        panelGrafica.setPrefHeight(200);
+        // Ajuste de tamaño de la ventana y elementos
+        var mainBox = new VBox(
+            titulo,
+            peticionesBox,
+            controls,
+            statsBox,
+            panelGrafica,
+            leyenda
+        );
+        mainBox.setSpacing(10);
+        mainBox.setPadding(new Insets(10, 8, 8, 8));
+        mainBox.setAlignment(Pos.CENTER);
+        var scene = new Scene(mainBox, 720, 520); // Ventana más baja y menos ancha
         // CSS embebido mejorado y suavizado
         var css = """
             .root {
                 -fx-background-color: linear-gradient(to bottom, #23243a 0%, #2d2e4a 100%);
                 -fx-font-family: 'Segoe UI', 'Arial', sans-serif;
             }
+            /* NO hay reglas para ProgressBar ni .bar ni nada similar */
             .titulo {
-                -fx-font-size: 26px;
+                -fx-font-size: 24px;
                 -fx-text-fill: #a88ff0;
                 -fx-font-weight: bold;
-                -fx-padding: 0 0 18 0;
+                -fx-padding: 0 0 10 0;
                 -fx-alignment: center;
             }
             .label {
-                -fx-font-size: 16px;
+                -fx-font-size: 15px;
                 -fx-text-fill: #a88ff0;
                 -fx-font-weight: bold;
                 -fx-alignment: center-left;
@@ -61,17 +147,17 @@ public class Interfaz extends Application {
                 -fx-border-color: #a88ff0;
                 -fx-border-radius: 10;
                 -fx-background-radius: 10;
-                -fx-font-size: 15px;
-                -fx-padding: 7 12 7 12;
+                -fx-font-size: 14px;
+                -fx-padding: 6 10 6 10;
             }
             .boton {
                 -fx-background-color: linear-gradient(to bottom, #a88ff0 0%, #7c6ee6 100%);
                 -fx-text-fill: #23243a;
-                -fx-font-size: 16px;
+                -fx-font-size: 15px;
                 -fx-font-weight: bold;
                 -fx-background-radius: 10;
                 -fx-border-radius: 10;
-                -fx-padding: 10 28 10 28;
+                -fx-padding: 10 32 10 32;
                 -fx-cursor: hand;
                 -fx-effect: dropshadow(gaussian, #a88ff0, 8, 0.2, 0, 2);
                 -fx-alignment: center;
@@ -83,7 +169,7 @@ public class Interfaz extends Application {
             .area {
                 -fx-control-inner-background: #23243a;
                 -fx-text-fill: #a88ff0;
-                -fx-font-size: 14px;
+                -fx-font-size: 15px;
                 -fx-border-color: #a88ff0;
                 -fx-border-radius: 10;
                 -fx-background-radius: 10;
@@ -91,69 +177,25 @@ public class Interfaz extends Application {
             }
             .stats-box {
                 -fx-background-color: #23243a;
-                -fx-padding: 18;
-                -fx-border-radius: 14;
-                -fx-background-radius: 14;
+                -fx-padding: 20;
+                -fx-border-radius: 16;
+                -fx-background-radius: 16;
                 -fx-effect: dropshadow(gaussian, #a88ff0, 8, 0.2, 0, 2);
                 -fx-alignment: center;
             }
             .stats-label {
-                -fx-font-size: 20px;
+                -fx-font-size: 16px;
                 -fx-text-fill: #a88ff0;
                 -fx-font-weight: bold;
                 -fx-alignment: center;
             }
             .stats {
                 -fx-text-fill: #e0e0f0;
-                -fx-font-size: 15px;
-                -fx-padding: 6 0 6 0;
+                -fx-font-size: 13px;
+                -fx-padding: 4 0 4 0;
                 -fx-alignment: center;
             }
-            .progress-bar {
-                -fx-accent: #a88ff0;
-                -fx-background-radius: 10;
-                -fx-border-radius: 10;
-                -fx-pref-height: 18px;
-            }
-        """;
-
-        // Aplica las clases CSS a los nodos
-        titulo.getStyleClass().add("titulo");
-        lblPeticiones.getStyleClass().add("label");
-        txtPeticiones.getStyleClass().add("input");
-        btnSimular.getStyleClass().add("boton");
-        btnFreno.getStyleClass().add("boton");
-        statsBox.getStyleClass().add("stats-box");
-        statsLabel.getStyleClass().add("stats-label");
-        statsSinPool.getStyleClass().add("stats");
-        statsConPool.getStyleClass().add("stats");
-        progressBarSinPool.getStyleClass().add("progress-bar");
-        progressBarConPool.getStyleClass().add("progress-bar");
-        progresoSinPool.setStyle("-fx-alignment: center; -fx-text-fill: #b6aaff; -fx-font-size: 13px;");
-        progresoConPool.setStyle("-fx-alignment: center; -fx-text-fill: #b6aaff; -fx-font-size: 13px;");
-        layout.setStyle("-fx-alignment: center;");
-        statsBox.setStyle("-fx-alignment: center;");
-        controls.setStyle("-fx-alignment: center;");
-        peticionesBox.setStyle("-fx-alignment: center;");
-
-        // Instancia de la gráfica
-        var grafica = new GraficaEstadisticas();
-        grafica.setVisible(false);
-        grafica.setPrefHeight(320);
-        grafica.setMaxHeight(320);
-
-        // Layout principal reorganizado
-        var mainBox = new VBox(
-            titulo,
-            peticionesBox,
-            controls,
-            statsBox,
-            grafica
-        );
-        mainBox.setSpacing(20);
-        mainBox.setStyle("-fx-alignment: center; -fx-padding: 20 0 0 0;");
-        var scene = new Scene(mainBox, 900, 700);
-
+         """;
         // Escribir el CSS en un archivo temporal y cargarlo
         try {
             java.nio.file.Path tempCss = java.nio.file.Files.createTempFile("estilo", ".css");
@@ -162,11 +204,7 @@ public class Interfaz extends Application {
         } catch (Exception e) {
             System.err.println("No se pudo aplicar el CSS: " + e.getMessage());
         }
-        stage.setScene(scene);
-        stage.setTitle("Pool de Conexiones - Simulación");
-        stage.show();
-
-
+        // Acciones de los botones y lógica de simulación
         btnSimular.setOnAction(_ -> {
             Platform.runLater(() -> {
                 statsSinPool.setText("");
@@ -175,7 +213,8 @@ public class Interfaz extends Application {
                 progresoConPool.setText("");
                 progressBarSinPool.setProgress(0);
                 progressBarConPool.setProgress(0);
-                grafica.setVisible(false);
+                panelGrafica.getChildren().clear();
+                panelGrafica.setVisible(false);
                 statsBox.setVisible(true);
             });
             new Thread(() -> {
@@ -191,27 +230,35 @@ public class Interfaz extends Application {
                 var hiloSin = new Thread(managerSin);
                 var cliente = new Cliente(num);
                 cliente.setEstadisticaQueue(colaSin);
-                hiloSin.start();
+                // Hilo de progreso robusto y seguro
+                final Object lockSin = new Object();
+                final boolean[] terminadoSinPool = {false};
                 Thread actualizador = new Thread(() -> {
-                    while (cliente.getCompletadas() < num && !Cliente.estaFrenado()) {
-                        double progreso = cliente.getCompletadas() / (double) num;
+                    while (true) {
                         int completadas = cliente.getCompletadas();
+                        double progreso = completadas / (double) num;
                         int faltantes = num - completadas;
                         Platform.runLater(() -> {
-                            progressBarSinPool.setProgress(progreso);
-                            progresoSinPool.setText("Completadas: " + completadas + " | Faltantes: " + faltantes);
-                            statsBox.setVisible(true);
-                            grafica.setVisible(false);
+                            progressBarSinPool.setProgress(Math.min(progreso, 1.0));
+                            progresoSinPool.setText("Sin pool: " + completadas + " completadas | " + faltantes + " faltantes");
                         });
-                        try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+                        if (completadas >= num || Cliente.estaFrenado()) break;
+                        try { Thread.sleep(40); } catch (InterruptedException ignored) {}
                     }
-                    Platform.runLater(() -> progressBarSinPool.setProgress(1.0));
+                    Platform.runLater(() -> {
+                        progressBarSinPool.setProgress(1.0);
+                        progresoSinPool.setText("Sin pool: " + cliente.getCompletadas() + " completadas | 0 faltantes");
+                    });
+                    synchronized (lockSin) { terminadoSinPool[0] = true; lockSin.notifyAll(); }
                 });
                 actualizador.setDaemon(true);
                 actualizador.start();
+                hiloSin.start();
                 cliente.ejecutarSinPoolConEstadisticas();
                 managerSin.stop();
                 try { hiloSin.join(); } catch (InterruptedException ignored) {}
+                // Esperar a que el hilo de progreso termine
+                synchronized (lockSin) { while (!terminadoSinPool[0]) { try { lockSin.wait(); } catch (InterruptedException ignored) {} } }
                 Platform.runLater(() -> {
                     int exitosas = managerSin.getExitosas();
                     int fallidas = managerSin.getFallidas();
@@ -230,27 +277,34 @@ public class Interfaz extends Application {
                 var hiloCon = new Thread(managerCon);
                 var clientePool = new Cliente(num);
                 clientePool.setEstadisticaQueue(colaCon);
-                hiloCon.start();
+                final Object lockCon = new Object();
+                final boolean[] terminadoConPool = {false};
                 Thread actualizador2 = new Thread(() -> {
-                    while (clientePool.getCompletadas() < num && !Cliente.estaFrenado()) {
-                        double progreso = clientePool.getCompletadas() / (double) num;
+                    while (true) {
                         int completadas = clientePool.getCompletadas();
+                        double progreso = completadas / (double) num;
                         int faltantes = num - completadas;
                         Platform.runLater(() -> {
-                            progressBarConPool.setProgress(progreso);
-                            progresoConPool.setText("Completadas: " + completadas + " | Faltantes: " + faltantes);
-                            statsBox.setVisible(true);
-                            grafica.setVisible(false);
+                            progressBarConPool.setProgress(Math.min(progreso, 1.0));
+                            progresoConPool.setText("Con pool: " + completadas + " completadas | " + faltantes + " faltantes");
                         });
-                        try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+                        if (completadas >= num || Cliente.estaFrenado()) break;
+                        try { Thread.sleep(40); } catch (InterruptedException ignored) {}
                     }
-                    Platform.runLater(() -> progressBarConPool.setProgress(1.0));
+                    Platform.runLater(() -> {
+                        progressBarConPool.setProgress(1.0);
+                        progresoConPool.setText("Con pool: " + clientePool.getCompletadas() + " completadas | 0 faltantes");
+                    });
+                    synchronized (lockCon) { terminadoConPool[0] = true; lockCon.notifyAll(); }
                 });
                 actualizador2.setDaemon(true);
                 actualizador2.start();
+                hiloCon.start();
                 clientePool.ejecutarConPoolConEstadisticas();
                 managerCon.stop();
                 try { hiloCon.join(); } catch (InterruptedException ignored) {}
+                // Esperar a que el hilo de progreso termine
+                synchronized (lockCon) { while (!terminadoConPool[0]) { try { lockCon.wait(); } catch (InterruptedException ignored) {} } }
                 Platform.runLater(() -> {
                     int exitosas = managerCon.getExitosas();
                     int fallidas = managerCon.getFallidas();
@@ -265,13 +319,13 @@ public class Interfaz extends Application {
                 });
                 // Al terminar ambas tandas, mostrar la gráfica
                 Platform.runLater(() -> {
-                    grafica.mostrarResultados(
+                    mostrarGraficaEstadisticas(
                         managerSin.getExitosas(),
                         managerSin.getFallidas(),
                         managerCon.getExitosas(),
                         managerCon.getFallidas()
                     );
-                    grafica.setVisible(true);
+                    panelGrafica.setVisible(true);
                 });
             }).start();
         });
@@ -279,5 +333,14 @@ public class Interfaz extends Application {
             Cliente.activarFreno(true);
             Platform.runLater(() -> statsSinPool.setText("Freno de emergencia activado"));
         });
+        stage.setScene(scene);
+        stage.setTitle("Pool de Conexiones - Simulación");
+        stage.show();
+    }
+
+    private void mostrarGraficaEstadisticas(int exitosasSinPool, int fallidasSinPool, int exitosasConPool, int fallidasConPool) {
+        panelGrafica.getChildren().clear();
+        VBox grafica = new GraficaEstadisticas(exitosasSinPool, fallidasSinPool, exitosasConPool, fallidasConPool).crearGrafica();
+        panelGrafica.getChildren().add(grafica);
     }
 }
