@@ -5,6 +5,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javafx.application.Platform;
 import javafx.scene.control.TextArea;
+import pool.PoolManager;
+import pool.Config;
 
 public class Cliente {
     private final int numeroPeticiones;

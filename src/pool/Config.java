@@ -1,12 +1,20 @@
+package pool;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Properties;
 
+/**
+ * Configuración centralizada para el paquete pool.
+ *
+ * Nota: En Java NO se puede referenciar una clase del "default package" desde
+ * un paquete con nombre (como `pool`). Por eso esta clase vive en `pool`.
+ */
 public class Config {
     private static final Properties properties = new Properties();
 
     static {
-        try (var fis = new FileInputStream(".env")) { // Uso de var para simplificar la declaración
+        try (var fis = new FileInputStream(".env")) {
             properties.load(fis);
         } catch (IOException e) {
             throw new RuntimeException("Error al cargar el archivo .env", e);
@@ -25,3 +33,4 @@ public class Config {
         return Long.parseLong(properties.getProperty(key));
     }
 }
+

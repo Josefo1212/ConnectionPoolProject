@@ -1,3 +1,5 @@
+package pool;
+
 import java.sql.Connection;
 
 public class PoolManager {
@@ -30,3 +32,4 @@ public class PoolManager {
         pool.releaseConnection(connection);
     }
 }
+

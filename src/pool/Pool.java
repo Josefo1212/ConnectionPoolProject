@@ -1,3 +1,5 @@
+package pool;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -14,10 +16,10 @@ class Pool implements ConnectionPool {
 
     private Pool() throws SQLException {
         this(
-            "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
-            Config.get("DB_USER"),
-            Config.get("DB_PASSWORD"),
-            Config.getInt("POOL_SIZE")
+                "jdbc:postgresql://" + pool.Config.get("DB_HOST") + ":" + pool.Config.get("DB_PORT") + "/" + pool.Config.get("DB_NAME"),
+                pool.Config.get("DB_USER"),
+                pool.Config.get("DB_PASSWORD"),
+                pool.Config.getInt("POOL_SIZE")
         );
     }
 
@@ -53,7 +55,7 @@ class Pool implements ConnectionPool {
 
     @Override
     public Connection getConnection() throws InterruptedException {
-        var timeout = Config.getLong("POOL_TIMEOUT");
+        var timeout = pool.Config.getLong("POOL_TIMEOUT");
         return connectionPool.poll(timeout, TimeUnit.MILLISECONDS);
     }
 
