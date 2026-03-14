@@ -1,4 +1,4 @@
-package adapters.postgres;
+package adapters.mysql;
 
 import dbcomponent.*;
 import pool.PoolManager;
@@ -10,12 +10,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PostgreSQLAdapter implements IDBComponent<Object> {
+public class MySQLAdapter implements IDBComponent<Object> {
     private final PoolManager poolManager;
 
-    public PostgreSQLAdapter() {
-        // Inicializa el pool genérico con la config de PostgreSQL (una sola vez en toda la app).
-        PoolManager.initialize(PostgreSQLConfig.DRIVER, PostgreSQLConfig.URL, PostgreSQLConfig.USER, PostgreSQLConfig.PASSWORD);
+    public MySQLAdapter() {
+        // Inicializa el pool genérico con la config de MySQL (una sola vez en toda la app).
+        PoolManager.initialize(MySQLConfig.DRIVER, MySQLConfig.URL, MySQLConfig.USER, MySQLConfig.PASSWORD);
         this.poolManager = PoolManager.getInstance();
     }
 
@@ -32,8 +32,6 @@ public class PostgreSQLAdapter implements IDBComponent<Object> {
     public DBQueryResult<Object> executeQuery(String query) throws DBException {
         Connection c = acquire();
         try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(query)) {
-            // Resultado genérico: devolvemos el ResultSet materializado como List<Object[]> (mínimo viable)
-            // Para tipado real, usa la sobrecarga con RowMapper.
             var rows = new ArrayList<Object[]>();
             int cols = rs.getMetaData().getColumnCount();
             while (rs.next()) {
@@ -82,26 +80,27 @@ public class PostgreSQLAdapter implements IDBComponent<Object> {
 
     @Override
     public DBConnection getConnection() throws DBException {
-        return new PostgreSQLConnection(acquire(), poolManager);
+        return new MySQLConnection(acquire(), poolManager);
     }
 
     @Override
     public DBTransaction transaction() throws DBException {
-        return new PostgresSQLTransaction(acquire(), poolManager);
+        return new MySQLTransaction(acquire(), poolManager);
     }
 
     @Override
     public DBQueryBatch batch() throws DBException {
-        return new PostgreSQLBatch(acquire(), poolManager);
+        return new MySQLBatch(acquire(), poolManager);
     }
 
     @Override
     public DBQueryFile queryFiles() throws DBException {
-        return new PostgresSQLQueryFile(acquire(), poolManager);
+        return new MySQLQueryFile(acquire(), poolManager);
     }
 
     @Override
     public void close() throws DBException {
-        // No-op: el pool vive toda la app. Las conexiones se adquieren/liberan por operación.
+        // No-op: el pool vive toda la app.
     }
 }
+

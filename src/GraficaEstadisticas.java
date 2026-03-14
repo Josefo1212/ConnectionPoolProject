@@ -1,94 +1,64 @@
 import javafx.scene.chart.PieChart;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Text;
 import javafx.geometry.Pos;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.scene.Node;
 
 public class GraficaEstadisticas {
-    private final int exitosasSinPool;
-    private final int fallidasSinPool;
-    private final int exitosasConPool;
-    private final int fallidasConPool;
+    private final int exitosasSinPool, fallidasSinPool, exitosasConPool, fallidasConPool;
 
-    public GraficaEstadisticas(int exitosasSinPool, int fallidasSinPool, int exitosasConPool, int fallidasConPool) {
-        this.exitosasSinPool = exitosasSinPool;
-        this.fallidasSinPool = fallidasSinPool;
-        this.exitosasConPool = exitosasConPool;
-        this.fallidasConPool = fallidasConPool;
+    public GraficaEstadisticas(int es, int fs, int ec, int fc) {
+        this.exitosasSinPool = es;
+        this.fallidasSinPool = fs;
+        this.exitosasConPool = ec;
+        this.fallidasConPool = fc;
     }
 
     public VBox crearGrafica() {
-        VBox contenedor = new VBox(20);
-        contenedor.setAlignment(Pos.CENTER);
+        HBox contenedorGraficas = new HBox(40);
+        contenedorGraficas.setAlignment(Pos.CENTER);
 
-        // Gráfico de torta para sin pool
-        PieChart pieSinPool = new PieChart();
-        pieSinPool.setTitle("Sin pool de conexiones");
-        PieChart.Data dataExitosasSin = new PieChart.Data("Exitosas", exitosasSinPool);
-        PieChart.Data dataFallidasSin = new PieChart.Data("Fallidas", fallidasSinPool);
-        pieSinPool.getData().addAll(dataExitosasSin, dataFallidasSin);
-        pieSinPool.setLabelsVisible(true);
-        pieSinPool.setLegendVisible(true);
-        pieSinPool.setPrefSize(160, 160);
-        pieSinPool.setMaxSize(160, 160);
-        pieSinPool.setMinSize(160, 160);
-        pieSinPool.setStyle("-fx-pie-label-visible: true; -fx-font-size: 15px;");
+        PieChart pcSin = crearPie("Sin Pool", exitosasSinPool, fallidasSinPool);
+        PieChart pcCon = crearPie("Con Pool", exitosasConPool, fallidasConPool);
 
-        // Gráfico de torta para con pool
-        PieChart pieConPool = new PieChart();
-        pieConPool.setTitle("Con pool de conexiones");
-        PieChart.Data dataExitosasCon = new PieChart.Data("Exitosas", exitosasConPool);
-        PieChart.Data dataFallidasCon = new PieChart.Data("Fallidas", fallidasConPool);
-        pieConPool.getData().addAll(dataExitosasCon, dataFallidasCon);
-        pieConPool.setLabelsVisible(true);
-        pieConPool.setLegendVisible(true);
-        pieConPool.setPrefSize(160, 160);
-        pieConPool.setMaxSize(160, 160);
-        pieConPool.setMinSize(160, 160);
-        pieConPool.setStyle("-fx-pie-label-visible: true; -fx-font-size: 15px;");
+        HBox.setHgrow(pcSin, Priority.ALWAYS);
+        HBox.setHgrow(pcCon, Priority.ALWAYS);
 
-        // Forzar colores de las porciones
-        pieSinPool.getData().forEach(data -> {
-            Node node = data.getNode();
-            if (node != null) {
-                if ("Exitosas".equals(data.getName())) node.setStyle("-fx-pie-color: #2196f3;");
-                if ("Fallidas".equals(data.getName())) node.setStyle("-fx-pie-color: #e53935;");
+        contenedorGraficas.getChildren().addAll(pcSin, pcCon);
+
+        VBox layout = new VBox(10, contenedorGraficas);
+        layout.setAlignment(Pos.CENTER);
+        return layout;
+    }
+
+    private PieChart crearPie(String titulo, int exito, int fallo) {
+        PieChart pie = new PieChart();
+        pie.setTitle(titulo);
+
+        PieChart.Data d0 = new PieChart.Data("Exitosas", exito);
+        PieChart.Data d1 = new PieChart.Data("Fallidas", fallo);
+        pie.getData().addAll(d0, d1);
+
+        pie.setLabelsVisible(true);
+        pie.setLegendVisible(false);
+
+        // Colores: azul (éxito) / rojo (fallo)
+        applySliceColor(d0, "#2196f3");
+        applySliceColor(d1, "#e53935");
+
+        return pie;
+    }
+
+    private void applySliceColor(PieChart.Data data, String color) {
+        Node n = data.getNode();
+        if (n != null) {
+            n.setStyle("-fx-pie-color: " + color + ";");
+        }
+        data.nodeProperty().addListener((obs, oldNode, newNode) -> {
+            if (newNode != null) {
+                newNode.setStyle("-fx-pie-color: " + color + ";");
             }
         });
-        pieConPool.getData().forEach(data -> {
-            Node node = data.getNode();
-            if (node != null) {
-                if ("Exitosas".equals(data.getName())) node.setStyle("-fx-pie-color: #2196f3;");
-                if ("Fallidas".equals(data.getName())) node.setStyle("-fx-pie-color: #e53935;");
-            }
-        });
-        // Asegurar que los colores se apliquen después de renderizar
-        pieSinPool.getData().forEach(data -> data.nodeProperty().addListener((obs, oldNode, newNode) -> {
-            if (newNode != null) {
-                if ("Exitosas".equals(data.getName())) newNode.setStyle("-fx-pie-color: #2196f3;");
-                if ("Fallidas".equals(data.getName())) newNode.setStyle("-fx-pie-color: #e53935;");
-            }
-        }));
-        pieConPool.getData().forEach(data -> data.nodeProperty().addListener((obs, oldNode, newNode) -> {
-            if (newNode != null) {
-                if ("Exitosas".equals(data.getName())) newNode.setStyle("-fx-pie-color: #2196f3;");
-                if ("Fallidas".equals(data.getName())) newNode.setStyle("-fx-pie-color: #e53935;");
-            }
-        }));
-
-        HBox hBox = new HBox(60, pieSinPool, pieConPool);
-        hBox.setAlignment(Pos.CENTER);
-
-        Text titulo = new Text("Resultados de la simulación");
-        titulo.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
-        titulo.setFill(Color.web("#6c2eb7"));
-        titulo.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        contenedor.getChildren().addAll(titulo, hBox);
-        return contenedor;
     }
 }

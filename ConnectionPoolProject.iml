@@ -19,6 +19,16 @@
             <orderEntry type="module-library">
               <library>
                 <CLASSES>
+                  <root url="jar://$MODULE_DIR$/lib/mysqljdbcdriver/mysql-connector-j-9.6.0.jar!/" />
+                  <root url="jar://$MODULE_DIR$/lib/mysqljdbcdriver/protobuf-java-4.31.1.jar!/" />
+                </CLASSES>
+                <JAVADOC />
+                <SOURCES />
+              </library>
+            </orderEntry>
+            <orderEntry type="module-library">
+              <library>
+                <CLASSES>
                   <root url="jar://$MODULE_DIR$/lib/javafx-sdk-25.0.2/lib/javafx.base.jar!/" />
                   <root url="jar://$MODULE_DIR$/lib/javafx-sdk-25.0.2/lib/javafx.controls.jar!/" />
                   <root url="jar://$MODULE_DIR$/lib/javafx-sdk-25.0.2/lib/javafx.fxml.jar!/" />

@@ -6,17 +6,55 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import javafx.application.Platform;
 import javafx.scene.control.TextArea;
 import pool.PoolManager;
-import pool.Config;
+
+import adapters.DatabaseType;
+import adapters.mysql.MySQLConfig;
+import adapters.postgres.PostgreSQLConfig;
 
 public class Cliente {
     private final int numeroPeticiones;
     private static final AtomicBoolean freno = new AtomicBoolean(false);
+
+    private static volatile DatabaseType databaseType; // se setea desde la UI antes de simular
+
     private TextArea outputArea;
     private ConcurrentLinkedQueue<EstadisticaManager.Peticion> colaEstadisticas;
     private final AtomicInteger completadas = new AtomicInteger(0);
     private final AtomicInteger exitosas = new AtomicInteger(0);
     private final AtomicInteger fallidas = new AtomicInteger(0);
     private PoolManager poolManager;
+
+    public static void setDatabaseType(DatabaseType type) {
+        databaseType = type;
+    }
+
+    private static DatabaseType requireDatabaseType() {
+        if (databaseType == null) {
+            throw new IllegalStateException("No se seleccionó base de datos. Elige PostgreSQL o MySQL antes de simular.");
+        }
+        return databaseType;
+    }
+
+    private static String resolveJdbcUrl() {
+        return switch (requireDatabaseType()) {
+            case POSTGRES -> PostgreSQLConfig.URL;
+            case MYSQL -> MySQLConfig.URL;
+        };
+    }
+
+    private static String resolveUser() {
+        return switch (requireDatabaseType()) {
+            case POSTGRES -> PostgreSQLConfig.USER;
+            case MYSQL -> MySQLConfig.USER;
+        };
+    }
+
+    private static String resolvePassword() {
+        return switch (requireDatabaseType()) {
+            case POSTGRES -> PostgreSQLConfig.PASSWORD;
+            case MYSQL -> MySQLConfig.PASSWORD;
+        };
+    }
 
     public Cliente(int numeroPeticiones) {
         this.numeroPeticiones = numeroPeticiones;
@@ -58,15 +96,17 @@ public class Cliente {
         fallidas.set(0);
         var inicio = System.currentTimeMillis();
         var tareas = new java.util.ArrayList<Thread>();
+
+        // Resolver credenciales según selección (NO pool)
+        String url = resolveJdbcUrl();
+        String user = resolveUser();
+        String pass = resolvePassword();
+
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
             Thread t = new Thread(() -> {
                 boolean exito = false;
-                try (var connection = DriverManager.getConnection(
-                        "jdbc:postgresql://" + Config.get("DB_HOST") + ":" + Config.get("DB_PORT") + "/" + Config.get("DB_NAME"),
-                        Config.get("DB_USER"),
-                        Config.get("DB_PASSWORD")
-                )) {
+                try (var connection = DriverManager.getConnection(url, user, pass)) {
                     if (estaFrenado()) {
                         if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
                         fallidas.incrementAndGet();
@@ -102,6 +142,9 @@ public class Cliente {
     }
 
     public void ejecutarConPoolConEstadisticas() {
+        // Asegura que se seleccionó DB antes de usar el pool
+        requireDatabaseType();
+
         activarFreno(false);
         var frenoThread = escucharFreno();
         completadas.set(0);
