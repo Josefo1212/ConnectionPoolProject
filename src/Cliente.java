@@ -5,11 +5,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import javafx.application.Platform;
 import javafx.scene.control.TextArea;
-import pool.PoolManager;
 
 import adapters.DatabaseType;
-import adapters.mysql.MySQLConfig;
-import adapters.postgres.PostgreSQLConfig;
+import dbcomponent.DBComponent;
+import dbcomponent.DBComponentRegistry;
+import dbcomponent.DBQueries;
+import dbcomponent.DBQueryId;
 
 public class Cliente {
     private final int numeroPeticiones;
@@ -17,12 +18,13 @@ public class Cliente {
 
     private static volatile DatabaseType databaseType; // se setea desde la UI antes de simular
 
+    private static final DBQueryId Q_SELECT_ONE = new DBQueryId("usuario.selectOne");
+
     private TextArea outputArea;
     private ConcurrentLinkedQueue<EstadisticaManager.Peticion> colaEstadisticas;
     private final AtomicInteger completadas = new AtomicInteger(0);
     private final AtomicInteger exitosas = new AtomicInteger(0);
     private final AtomicInteger fallidas = new AtomicInteger(0);
-    private PoolManager poolManager;
 
     public static void setDatabaseType(DatabaseType type) {
         databaseType = type;
@@ -35,26 +37,15 @@ public class Cliente {
         return databaseType;
     }
 
-    private static String resolveJdbcUrl() {
-        return switch (requireDatabaseType()) {
-            case POSTGRES -> PostgreSQLConfig.URL;
-            case MYSQL -> MySQLConfig.URL;
-        };
+    private static DBComponent requireComponent() {
+        DatabaseType t = requireDatabaseType();
+        DBComponent c = DBComponentRegistry.get(t);
+        if (c == null) {
+            throw new IllegalStateException("No hay conexión activa. Presiona Conectar antes de simular.");
+        }
+        return c;
     }
 
-    private static String resolveUser() {
-        return switch (requireDatabaseType()) {
-            case POSTGRES -> PostgreSQLConfig.USER;
-            case MYSQL -> MySQLConfig.USER;
-        };
-    }
-
-    private static String resolvePassword() {
-        return switch (requireDatabaseType()) {
-            case POSTGRES -> PostgreSQLConfig.PASSWORD;
-            case MYSQL -> MySQLConfig.PASSWORD;
-        };
-    }
 
     public Cliente(int numeroPeticiones) {
         this.numeroPeticiones = numeroPeticiones;
@@ -97,10 +88,22 @@ public class Cliente {
         var inicio = System.currentTimeMillis();
         var tareas = new java.util.ArrayList<Thread>();
 
-        // Resolver credenciales según selección (NO pool)
-        String url = resolveJdbcUrl();
-        String user = resolveUser();
-        String pass = resolvePassword();
+        // Resolver credenciales desde la conexión ya creada en la UI
+        // (sin pool: DriverManager por petición, pero usando los mismos datos del componente).
+        final DBComponent component = requireComponent();
+        final String url = component.getUrl();
+        final String user = component.getUser();
+        final String pass = component.getPassword();
+        final String queriesResource = component.getQueriesResource();
+
+        // En modo SIN pool seguimos usando DriverManager por petición,
+        // pero el SQL se toma del repositorio de queries (no queda hardcodeado aquí).
+        final String sql;
+        try {
+            sql = DBQueries.loadFromClasspath(queriesResource).sql(Q_SELECT_ONE);
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo cargar el archivo de queries del adapter: " + e.getMessage(), e);
+        }
 
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
@@ -113,14 +116,14 @@ public class Cliente {
                         return;
                     }
                     try (var stmt = connection.createStatement()) {
-                        var rs = stmt.executeQuery("SELECT * FROM usuario LIMIT 1");
+                        var rs = stmt.executeQuery(sql);
                         while (rs.next() && !estaFrenado()) {
                             exito = true;
                         }
-                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
-                        if (exito) exitosas.incrementAndGet();
-                        else fallidas.incrementAndGet();
                     }
+                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
+                    if (exito) exitosas.incrementAndGet();
+                    else fallidas.incrementAndGet();
                     Thread.sleep(new Random().nextInt(500));
                 } catch (Exception e) {
                     if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
@@ -155,38 +158,24 @@ public class Cliente {
         for (var i = 0; i < numeroPeticiones; i++) {
             final var idx = i + 1;
             Thread t = new Thread(() -> {
-                boolean exito = false;
+                boolean exito;
                 try {
-                    if (poolManager == null) poolManager = PoolManager.getInstance();
+                    // Con pool: obligatoriamente usar el DBComponent conectado para esta BD.
+                    DBComponent comp = requireComponent();
                     if (estaFrenado()) {
                         if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
                         fallidas.incrementAndGet();
                         return;
                     }
-                    var connection = poolManager.getConnection();
-                    if (estaFrenado()) {
-                        if (connection != null) poolManager.releaseConnection(connection);
-                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
-                        fallidas.incrementAndGet();
-                        return;
-                    }
-                    if (connection != null) {
-                        try (var stmt = connection.createStatement()) {
-                            var rs = stmt.executeQuery("SELECT * FROM usuario LIMIT 1");
-                            while (rs.next() && !estaFrenado()) {
-                                exito = true;
-                            }
-                            if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
-                            if (exito) exitosas.incrementAndGet();
-                            else fallidas.incrementAndGet();
-                        } finally {
-                            poolManager.releaseConnection(connection);
-                        }
-                        Thread.sleep(new Random().nextInt(500));
-                    } else if (!estaFrenado()) {
-                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "No se pudo obtener conexión"));
-                        fallidas.incrementAndGet();
-                    }
+
+                    // Ejecutar query predefinida por ID.
+                    comp.query(Q_SELECT_ONE);
+                    exito = true; // si no lanzó excepción, lo consideramos éxito
+                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
+                    if (exito) exitosas.incrementAndGet();
+                    else fallidas.incrementAndGet();
+
+                    Thread.sleep(new Random().nextInt(500));
                 } catch (Exception e) {
                     if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
                     fallidas.incrementAndGet();

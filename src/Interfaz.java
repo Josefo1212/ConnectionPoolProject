@@ -12,9 +12,14 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-import adapters.DBAdapterFactory;
 import adapters.DatabaseType;
+import adapters.DBAdapterFactory;
+import adapters.IDBAdapter;
+import dbcomponent.ConnectionConfig;
+import dbcomponent.DBComponent;
+import dbcomponent.DBComponentRegistry;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -31,6 +36,12 @@ public class Interfaz extends Application {
 
     private TextField txtPeticiones;
     private RadioButton rbPostgres, rbMySql;
+    private Label estadoPostgres, estadoMySql;
+
+    // Campos conexión
+    private TextField txtHost, txtPort, txtDb, txtUser;
+    private PasswordField txtPass;
+    private Button btnConectar;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
@@ -44,7 +55,7 @@ public class Interfaz extends Application {
 
     private AnimationTimer smoothTimer;
 
-    private Label errorMsg = new Label("");
+    private final Label errorMsg = new Label("");
 
     @Override
     public void start(Stage stage) {
@@ -55,18 +66,19 @@ public class Interfaz extends Application {
         root.getStyleClass().add("main-root");
 
         // ================= COLUMNA IZQUIERDA (Configuración) =================
-        VBox leftCol = new VBox(20);
+        VBox leftCol = new VBox(12);
         // Evitar que se encoja cuando aparece la gráfica
-        leftCol.setMinWidth(350);
-        leftCol.setPrefWidth(350);
-        leftCol.setMaxWidth(350);
+        leftCol.setMinWidth(320);
+        leftCol.setPrefWidth(320);
+        leftCol.setMaxWidth(320);
         HBox.setHgrow(leftCol, Priority.NEVER);
 
         leftCol.getStyleClass().add("panel-oscuro");
         leftCol.setAlignment(Pos.TOP_CENTER);
+        leftCol.setFillWidth(true);
 
         Label titleLeft = new Label("Configuración de\nParámetros");
-        titleLeft.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+        titleLeft.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
         titleLeft.setTextFill(Color.WHITE);
         titleLeft.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
@@ -78,11 +90,53 @@ public class Interfaz extends Application {
         rbMySql.setToggleGroup(tgDb);
         rbPostgres.getStyleClass().add("db-selector");
         rbMySql.getStyleClass().add("db-selector");
-        HBox dbContainer = new HBox(15, rbPostgres, rbMySql);
+        HBox dbContainer = new HBox(12, rbPostgres, rbMySql);
         dbContainer.setAlignment(Pos.CENTER);
+
+        rbPostgres.setOnAction(_ -> rellenarDefaultsConexion(DatabaseType.POSTGRES));
+        rbMySql.setOnAction(_ -> rellenarDefaultsConexion(DatabaseType.MYSQL));
 
         Label lblDb = new Label("Base de Datos");
         lblDb.setTextFill(Color.LIGHTGRAY);
+
+        Label lblEstado = new Label("Estado de conexión");
+        lblEstado.setTextFill(Color.LIGHTGRAY);
+
+        estadoPostgres = new Label();
+        estadoPostgres.setWrapText(true);
+        estadoPostgres.setMaxWidth(Double.MAX_VALUE);
+
+        estadoMySql = new Label();
+        estadoMySql.setWrapText(true);
+        estadoMySql.setMaxWidth(Double.MAX_VALUE);
+
+        // ================= FORMULARIO CONEXIÓN =================
+        Label lblConn = new Label("Datos de conexión");
+        lblConn.setTextFill(Color.LIGHTGRAY);
+
+        txtHost = new TextField("");
+        txtHost.setPromptText("host (ej. localhost)");
+        txtHost.getStyleClass().add("custom-field");
+
+        txtPort = new TextField("");
+        txtPort.setPromptText("puerto (ej. 5432/3306)");
+        txtPort.getStyleClass().add("custom-field");
+
+        txtDb = new TextField("");
+        txtDb.setPromptText("base de datos");
+        txtDb.getStyleClass().add("custom-field");
+
+        txtUser = new TextField("");
+        txtUser.setPromptText("usuario");
+        txtUser.getStyleClass().add("custom-field");
+
+        txtPass = new PasswordField();
+        txtPass.setPromptText("contraseña");
+        txtPass.getStyleClass().add("custom-field");
+
+        btnConectar = new Button("⛓ Conectar");
+        btnConectar.getStyleClass().add("btn-iniciar");
+        btnConectar.setMaxWidth(Double.MAX_VALUE);
 
         // Control Peticiones
         Label lblPet = new Label("Número de Peticiones");
@@ -105,7 +159,35 @@ public class Interfaz extends Application {
         errorMsg.setMaxWidth(Double.MAX_VALUE);
         errorMsg.setAlignment(Pos.CENTER);
         errorMsg.setPadding(new Insets(8, 0, 0, 0));
-        leftCol.getChildren().addAll(titleLeft, dbContainer, lblDb, lblPet, txtPeticiones, btnSimular, btnFreno, errorMsg);
+        leftCol.getChildren().addAll(
+                titleLeft,
+                dbContainer,
+                lblDb,
+                lblEstado,
+                estadoPostgres,
+                estadoMySql,
+                lblConn,
+                txtHost,
+                txtPort,
+                txtDb,
+                txtUser,
+                txtPass,
+                btnConectar,
+                lblPet,
+                txtPeticiones,
+                btnSimular,
+                btnFreno,
+                errorMsg
+        );
+
+        ScrollPane leftScroll = new ScrollPane(leftCol);
+        leftScroll.setFitToWidth(true);
+        leftScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        leftScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        leftScroll.setPrefViewportWidth(330);
+        leftScroll.setMinWidth(330);
+        leftScroll.setMaxWidth(330);
+        leftScroll.getStyleClass().add("left-scroll");
 
         // ================= COLUMNA DERECHA (Métricas) =================
         VBox rightCol = new VBox(20);
@@ -134,10 +216,12 @@ public class Interfaz extends Application {
         VBox.setVgrow(panelGrafica, Priority.ALWAYS);
 
         rightCol.getChildren().addAll(titleRight, kpiBox, panelGrafica);
-        root.getChildren().addAll(leftCol, rightCol);
+        root.getChildren().addAll(leftScroll, rightCol);
 
-        Scene scene = new Scene(root, 1000, 650);
+        Scene scene = new Scene(root, 1120, 760);
         aplicarCSS(scene);
+
+        refrescarIndicadoresConexion();
 
         stage.setTitle("Simulación Pool de Conexiones Pro");
         stage.setScene(scene);
@@ -146,6 +230,7 @@ public class Interfaz extends Application {
         startSmoothProgressAnimation();
 
         btnSimular.setOnAction(_ -> ejecutarSimulacion());
+        btnConectar.setOnAction(_ -> conectarDB());
         btnFreno.setOnAction(_ -> {
             Cliente.activarFreno(true);
             errorMsg.setText("");
@@ -226,15 +311,136 @@ public class Interfaz extends Application {
     private void aplicarCSS(Scene scene) {
         String style = """
             .main-root { -fx-background-color: #0d1117; }
-            .panel-oscuro { -fx-background-color: #161b22; -fx-background-radius: 20; -fx-padding: 25; }
+            .panel-oscuro { -fx-background-color: #161b22; -fx-background-radius: 20; -fx-padding: 16; }
             .panel-metriz { -fx-background-color: #0d1117; -fx-border-color: #30363d; -fx-border-radius: 20; -fx-border-width: 2; }
-            .custom-field { -fx-background-color: #0d1117; -fx-text-fill: white; -fx-border-color: #30363d; -fx-border-radius: 5; -fx-alignment: center; -fx-font-size: 18; }
-            .btn-iniciar { -fx-background-color: linear-gradient(to bottom, #1f6feb, #0969da); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10; -fx-padding: 12; }
-            .btn-freno { -fx-background-color: #8b0000; -fx-text-fill: white; -fx-background-radius: 10; -fx-padding: 12; }
+            .custom-field { -fx-background-color: #0d1117; -fx-text-fill: white; -fx-border-color: #30363d; -fx-border-radius: 5; -fx-alignment: center; -fx-font-size: 14; -fx-padding: 6 8 6 8; }
+            .btn-iniciar { -fx-background-color: linear-gradient(to bottom, #1f6feb, #0969da); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10; -fx-padding: 9; }
+            .btn-freno { -fx-background-color: #8b0000; -fx-text-fill: white; -fx-background-radius: 10; -fx-padding: 9; }
             .db-selector { -fx-text-fill: white; }
+            .left-scroll { -fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0; }
+            .left-scroll > .viewport { -fx-background-color: transparent; }
         """;
 
         scene.getStylesheets().add("data:text/css," + style.replace("\n", ""));
+    }
+
+    private void conectarDB() {
+        Platform.runLater(() -> {
+            errorMsg.setText("");
+            errorMsg.setTextFill(Color.web("#ff4e8e"));
+        });
+        DatabaseType selected;
+        if (rbPostgres.isSelected()) selected = DatabaseType.POSTGRES;
+        else if (rbMySql.isSelected()) selected = DatabaseType.MYSQL;
+        else {
+            Platform.runLater(() -> {
+                errorMsg.setTextFill(Color.web("#ff4e8e"));
+                errorMsg.setText("Selecciona PostgreSQL o MySQL antes de conectar");
+            });
+            return;
+        }
+
+        String host = txtHost.getText().trim();
+        String portTxt = txtPort.getText().trim();
+        String db = txtDb.getText().trim();
+        String user = txtUser.getText().trim();
+        String pass = txtPass.getText();
+
+        if (host.isEmpty() || portTxt.isEmpty() || db.isEmpty() || user.isEmpty()) {
+            Platform.runLater(() -> {
+                errorMsg.setTextFill(Color.web("#ff4e8e"));
+                errorMsg.setText("Completa host/puerto/bd/usuario (contraseña si aplica) y vuelve a intentar");
+            });
+            return;
+        }
+
+        int port;
+        try {
+            port = Integer.parseInt(portTxt);
+        } catch (NumberFormatException e) {
+            Platform.runLater(() -> {
+                errorMsg.setTextFill(Color.web("#ff4e8e"));
+                errorMsg.setText("Puerto inválido");
+            });
+            return;
+        }
+
+        IDBAdapter adapter;
+        try {
+            adapter = DBAdapterFactory.adapter(selected);
+        } catch (Exception e) {
+            Platform.runLater(() -> {
+                errorMsg.setTextFill(Color.web("#ff4e8e"));
+                errorMsg.setText("No se pudo crear adapter: " + e.getMessage());
+            });
+            return;
+        }
+
+        final ConnectionConfig cfg = adapter.toConnectionConfig(host, port, db, user, pass);
+        final String queriesResource = adapter.queriesResource();
+
+        try {
+            DBComponent component = new DBComponent(
+                    cfg.driverClassName(),
+                    cfg.url(),
+                    cfg.user(),
+                    cfg.password(),
+                    queriesResource
+            );
+            // Intentar ejecutar una query predefinida para verificar conexión
+            try {
+                component.query(new dbcomponent.DBQueryId("usuario.selectOne"));
+                DBComponentRegistry.put(selected, component);
+                refrescarIndicadoresConexion();
+                Platform.runLater(() -> {
+                    errorMsg.setTextFill(Color.web("#7CFC00"));
+                    errorMsg.setText("Conectado correctamente a " + selected + "\n" + cfg.url());
+                });
+            } catch (Exception pingEx) {
+                refrescarIndicadoresConexion();
+                Platform.runLater(() -> {
+                    errorMsg.setTextFill(Color.web("#ff4e8e"));
+                    errorMsg.setText("Error conectando (ping): " + pingEx.getMessage());
+                });
+            }
+        } catch (Exception e) {
+            refrescarIndicadoresConexion();
+            Platform.runLater(() -> {
+                errorMsg.setTextFill(Color.web("#ff4e8e"));
+                errorMsg.setText("Error conectando: " + e.getMessage());
+            });
+        }
+    }
+
+    private void refrescarIndicadoresConexion() {
+        Platform.runLater(() -> {
+            boolean pg = DBComponentRegistry.isConnected(DatabaseType.POSTGRES);
+            boolean my = DBComponentRegistry.isConnected(DatabaseType.MYSQL);
+
+            estadoPostgres.setText("PostgreSQL: " + (pg ? "conectado" : "desconectado"));
+            estadoPostgres.setTextFill(pg ? Color.web("#7CFC00") : Color.web("#ff4e8e"));
+
+            estadoMySql.setText("MySQL: " + (my ? "conectado" : "desconectado"));
+            estadoMySql.setTextFill(my ? Color.web("#7CFC00") : Color.web("#ff4e8e"));
+        });
+    }
+
+    private void rellenarDefaultsConexion(DatabaseType type) {
+        if (type == null) return;
+        // No sobre-escribimos si el usuario ya escribió algo.
+        if (txtHost.getText().isBlank()) txtHost.setText("localhost");
+        if (type == DatabaseType.POSTGRES) {
+            if (txtPort.getText().isBlank()) txtPort.setText("5432");
+            txtDb.setPromptText("base de datos (PostgreSQL)");
+            txtUser.setPromptText("usuario (ej. postgres)");
+        } else {
+            if (txtPort.getText().isBlank()) txtPort.setText("3306");
+            txtDb.setPromptText("base de datos (MySQL)");
+            txtUser.setPromptText("usuario (MySQL)");
+        }
+        txtPass.setPromptText("contraseña");
+        errorMsg.setTextFill(Color.web("#ff4e8e"));
+        errorMsg.setText("");
     }
 
     private void ejecutarSimulacion() {
@@ -251,11 +457,9 @@ public class Interfaz extends Application {
         // Configurar DB para Cliente
         Cliente.setDatabaseType(selected);
 
-        // Inicializar pool vía adapter ANTES de correr simulaciones.
-        try {
-            DBAdapterFactory.create(selected);
-        } catch (Exception e) {
-            Platform.runLater(() -> statsSinPool.setText("Error inicializando adapter/pool: " + e.getMessage()));
+        // Debe existir conexión previa
+        if (!DBComponentRegistry.isConnected(selected)) {
+            errorMsg.setText("Primero conecta a " + selected + " (ingresa datos y presiona Conectar)");
             return;
         }
 
@@ -290,7 +494,7 @@ public class Interfaz extends Application {
             var cliente = new Cliente(num);
             cliente.setEstadisticaQueue(colaSin);
 
-            final boolean[] terminadoSinPool = {false};
+            final CountDownLatch terminadoSinPool = new CountDownLatch(1);
             final ScheduledFuture<?>[] futureSin = new ScheduledFuture<?>[1];
             futureSin[0] = scheduler.scheduleAtFixedRate(() -> {
                 int completadas = cliente.getCompletadas();
@@ -301,8 +505,8 @@ public class Interfaz extends Application {
                 });
                 if (completadas >= num || Cliente.estaFrenado()) {
                     Platform.runLater(() -> targetProgresoSin.set(1.0));
-                    terminadoSinPool[0] = true;
                     if (futureSin[0] != null) futureSin[0].cancel(false);
+                    if (terminadoSinPool.getCount() > 0) terminadoSinPool.countDown();
                 }
             }, 0, 20, TimeUnit.MILLISECONDS);
 
@@ -310,9 +514,7 @@ public class Interfaz extends Application {
             cliente.ejecutarSinPoolConEstadisticas();
             managerSin.stop();
             try { hiloSin.join(); } catch (InterruptedException ignored) {}
-            while (!terminadoSinPool[0]) {
-                try { Thread.sleep(20); } catch (InterruptedException ignored) {}
-            }
+            try { terminadoSinPool.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
             // Mostrar KPIs sin pool (éxitos/fallos + %)
             Platform.runLater(() -> {
@@ -330,7 +532,7 @@ public class Interfaz extends Application {
             var clientePool = new Cliente(num);
             clientePool.setEstadisticaQueue(colaCon);
 
-            final boolean[] terminadoConPool = {false};
+            final CountDownLatch terminadoConPool = new CountDownLatch(1);
             final ScheduledFuture<?>[] futureCon = new ScheduledFuture<?>[1];
             futureCon[0] = scheduler.scheduleAtFixedRate(() -> {
                 int completadas = clientePool.getCompletadas();
@@ -341,8 +543,8 @@ public class Interfaz extends Application {
                 });
                 if (completadas >= num || Cliente.estaFrenado()) {
                     Platform.runLater(() -> targetProgresoCon.set(1.0));
-                    terminadoConPool[0] = true;
                     if (futureCon[0] != null) futureCon[0].cancel(false);
+                    if (terminadoConPool.getCount() > 0) terminadoConPool.countDown();
                 }
             }, 0, 20, TimeUnit.MILLISECONDS);
 
@@ -350,9 +552,7 @@ public class Interfaz extends Application {
             clientePool.ejecutarConPoolConEstadisticas();
             managerCon.stop();
             try { hiloCon.join(); } catch (InterruptedException ignored) {}
-            while (!terminadoConPool[0]) {
-                try { Thread.sleep(20); } catch (InterruptedException ignored) {}
-            }
+            try { terminadoConPool.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
             Platform.runLater(() -> {
                 int ex = managerCon.getExitosas();

@@ -1,34 +1,44 @@
 package pool;
 
 import java.sql.Connection;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class PoolManager {
-    private static PoolManager instance;
+    private static final ConcurrentHashMap<String, PoolManager> INSTANCES = new ConcurrentHashMap<>();
     private final ConnectionPool pool;
 
-    private PoolManager() {
+    private PoolManager(String driverClassName, String url, String user, String password) {
         try {
-            pool = Pool.getInstance();
+            pool = new Pool(driverClassName, url, user, password, Config.getInt("POOL_SIZE"));
         } catch (Exception e) {
             throw new RuntimeException("No se pudo inicializar el pool de conexiones", e);
         }
     }
 
     /**
-     * Inicializa el pool genérico con parámetros del adapter (driver/url/user/pass).
-     * Debe ejecutarse antes de getInstance() la primera vez.
+     * Obtiene (o crea) un PoolManager asociado a una configuración específica.
+     *
+     * Cada clave mantiene su propio pool interno, permitiendo instancias separadas
+     * para distintos adapters/configuraciones (ej. PostgreSQL y MySQL).
      */
-    public static void initialize(String driverClassName, String url, String user, String password) {
-        try {
-            Pool.initialize(driverClassName, url, user, password);
-        } catch (Exception e) {
-            throw new RuntimeException("No se pudo inicializar el pool con la configuración del adapter", e);
-        }
+    public static PoolManager getInstance(String driverClassName, String url, String user, String password) {
+        Objects.requireNonNull(driverClassName, "driverClassName");
+        Objects.requireNonNull(url, "url");
+        Objects.requireNonNull(user, "user");
+        Objects.requireNonNull(password, "password");
+
+        String key = driverClassName + "|" + url + "|" + user;
+        return INSTANCES.computeIfAbsent(key, _k -> new PoolManager(driverClassName, url, user, password));
     }
 
+    /**
+     * Mantiene compatibilidad con el código anterior: devuelve el primer pool creado.
+     */
     public static synchronized PoolManager getInstance() {
-        if (instance == null) instance = new PoolManager();
-        return instance;
+        return INSTANCES.values().stream().findFirst().orElseGet(() -> {
+            throw new IllegalStateException("PoolManager no ha sido inicializado. Usa getInstance(driver,url,user,password) primero.");
+        });
     }
 
     public Connection getConnection() {
@@ -42,5 +52,11 @@ public class PoolManager {
 
     public void releaseConnection(Connection connection) {
         pool.releaseConnection(connection);
+    }
+
+    public void close() throws Exception {
+        if (pool instanceof Pool p) {
+            p.closePool();
+        }
     }
 }

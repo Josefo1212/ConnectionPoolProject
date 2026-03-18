@@ -8,6 +8,6 @@ public interface DBQueryBatch {
 
     DBQueryResult<int[]> executeBatch() throws DBException;
 
-    void addQuery(String query) throws DBException;
+    void addQuery(DBQueryId id) throws DBException;
 }
 
