@@ -21,12 +21,38 @@ public final class DBComponentRegistry {
         COMPONENTS.put(type, component);
     }
 
+    public static void putReplacing(DatabaseType type, DBComponent component) {
+        if (type == null) throw new IllegalArgumentException("type no puede ser null");
+        if (component == null) throw new IllegalArgumentException("component no puede ser null");
+
+        DBComponent previous = COMPONENTS.put(type, component);
+        if (previous != null && previous != component) {
+            try {
+                previous.disconnect();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     public static DBComponent get(DatabaseType type) {
         return COMPONENTS.get(type);
     }
 
+    public static void clear(DatabaseType type) {
+        if (type == null) throw new IllegalArgumentException("type no puede ser null");
+
+        DBComponent removed = COMPONENTS.remove(type);
+        if (removed != null) {
+            try {
+                removed.disconnect();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     public static boolean isConnected(DatabaseType type) {
-        return COMPONENTS.containsKey(type);
+        DBComponent c = COMPONENTS.get(type);
+        return c != null && c.isConnected();
     }
 }
 

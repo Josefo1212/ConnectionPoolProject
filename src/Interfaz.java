@@ -37,11 +37,11 @@ public class Interfaz extends Application {
     private TextField txtPeticiones;
     private RadioButton rbPostgres, rbMySql;
     private Label estadoPostgres, estadoMySql;
+    private Button btnSimular;
 
     // Campos conexión
     private TextField txtHost, txtPort, txtDb, txtUser;
     private PasswordField txtPass;
-    private Button btnConectar;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
@@ -93,8 +93,14 @@ public class Interfaz extends Application {
         HBox dbContainer = new HBox(12, rbPostgres, rbMySql);
         dbContainer.setAlignment(Pos.CENTER);
 
-        rbPostgres.setOnAction(_ -> rellenarDefaultsConexion(DatabaseType.POSTGRES));
-        rbMySql.setOnAction(_ -> rellenarDefaultsConexion(DatabaseType.MYSQL));
+        rbPostgres.setOnAction(_ -> {
+            rellenarDefaultsConexion(DatabaseType.POSTGRES);
+            actualizarEstadoSimular();
+        });
+        rbMySql.setOnAction(_ -> {
+            rellenarDefaultsConexion(DatabaseType.MYSQL);
+            actualizarEstadoSimular();
+        });
 
         Label lblDb = new Label("Base de Datos");
         lblDb.setTextFill(Color.LIGHTGRAY);
@@ -134,9 +140,13 @@ public class Interfaz extends Application {
         txtPass.setPromptText("contraseña");
         txtPass.getStyleClass().add("custom-field");
 
-        btnConectar = new Button("⛓ Conectar");
+        Button btnConectar = new Button("⛓ Conectar");
         btnConectar.getStyleClass().add("btn-iniciar");
         btnConectar.setMaxWidth(Double.MAX_VALUE);
+
+        Button btnLimpiarConexion = new Button("🧹 Limpiar conexión actual");
+        btnLimpiarConexion.getStyleClass().add("btn-freno");
+        btnLimpiarConexion.setMaxWidth(Double.MAX_VALUE);
 
         // Control Peticiones
         Label lblPet = new Label("Número de Peticiones");
@@ -145,7 +155,7 @@ public class Interfaz extends Application {
         txtPeticiones.getStyleClass().add("custom-field");
 
         // Botones Acción
-        Button btnSimular = new Button("▶ Iniciar");
+        btnSimular = new Button("▶ Iniciar");
         btnSimular.getStyleClass().add("btn-iniciar");
         btnSimular.setMaxWidth(Double.MAX_VALUE);
 
@@ -173,6 +183,7 @@ public class Interfaz extends Application {
                 txtUser,
                 txtPass,
                 btnConectar,
+                btnLimpiarConexion,
                 lblPet,
                 txtPeticiones,
                 btnSimular,
@@ -222,6 +233,7 @@ public class Interfaz extends Application {
         aplicarCSS(scene);
 
         refrescarIndicadoresConexion();
+        actualizarEstadoSimular();
 
         stage.setTitle("Simulación Pool de Conexiones Pro");
         stage.setScene(scene);
@@ -231,6 +243,7 @@ public class Interfaz extends Application {
 
         btnSimular.setOnAction(_ -> ejecutarSimulacion());
         btnConectar.setOnAction(_ -> conectarDB());
+        btnLimpiarConexion.setOnAction(_ -> limpiarConexionActual());
         btnFreno.setOnAction(_ -> {
             Cliente.activarFreno(true);
             errorMsg.setText("");
@@ -390,7 +403,7 @@ public class Interfaz extends Application {
             // Intentar ejecutar una query predefinida para verificar conexión
             try {
                 component.query(new dbcomponent.DBQueryId("usuario.selectOne"));
-                DBComponentRegistry.put(selected, component);
+                DBComponentRegistry.putReplacing(selected, component);
                 refrescarIndicadoresConexion();
                 Platform.runLater(() -> {
                     errorMsg.setTextFill(Color.web("#7CFC00"));
@@ -422,34 +435,71 @@ public class Interfaz extends Application {
 
             estadoMySql.setText("MySQL: " + (my ? "conectado" : "desconectado"));
             estadoMySql.setTextFill(my ? Color.web("#7CFC00") : Color.web("#ff4e8e"));
+
+            actualizarEstadoSimular();
+        });
+    }
+
+    private DatabaseType getDatabaseTypeSeleccionada() {
+        if (rbPostgres != null && rbPostgres.isSelected()) return DatabaseType.POSTGRES;
+        if (rbMySql != null && rbMySql.isSelected()) return DatabaseType.MYSQL;
+        return null;
+    }
+
+    private void actualizarEstadoSimular() {
+        Platform.runLater(() -> {
+            if (btnSimular == null) return;
+            DatabaseType selected = getDatabaseTypeSeleccionada();
+            boolean habilitado = selected != null && DBComponentRegistry.isConnected(selected);
+            btnSimular.setDisable(!habilitado);
         });
     }
 
     private void rellenarDefaultsConexion(DatabaseType type) {
         if (type == null) return;
-        // No sobre-escribimos si el usuario ya escribió algo.
-        if (txtHost.getText().isBlank()) txtHost.setText("localhost");
+
+        // Al cambiar de motor, limpiamos datos de la BD anterior para evitar conexiones inválidas.
+        txtHost.setText("localhost");
+        txtDb.clear();
+        txtUser.clear();
+        txtPass.clear();
+
         if (type == DatabaseType.POSTGRES) {
-            if (txtPort.getText().isBlank()) txtPort.setText("5432");
+            txtPort.setText("5432");
             txtDb.setPromptText("base de datos (PostgreSQL)");
             txtUser.setPromptText("usuario (ej. postgres)");
+            errorMsg.setText("PostgreSQL seleccionado: ingresa credenciales y presiona Conectar");
         } else {
-            if (txtPort.getText().isBlank()) txtPort.setText("3306");
+            txtPort.setText("3306");
             txtDb.setPromptText("base de datos (MySQL)");
             txtUser.setPromptText("usuario (MySQL)");
+            errorMsg.setText("MySQL seleccionado: ingresa credenciales y presiona Conectar");
         }
         txtPass.setPromptText("contraseña");
-        errorMsg.setTextFill(Color.web("#ff4e8e"));
-        errorMsg.setText("");
+        errorMsg.setTextFill(Color.web("#b6aaff"));
+    }
+
+    private void limpiarConexionActual() {
+        DatabaseType selected = getDatabaseTypeSeleccionada();
+        if (selected == null) {
+            errorMsg.setTextFill(Color.web("#ff4e8e"));
+            errorMsg.setText("Selecciona PostgreSQL o MySQL para limpiar su conexión");
+            return;
+        }
+
+        DBComponentRegistry.clear(selected);
+        refrescarIndicadoresConexion();
+        actualizarEstadoSimular();
+
+        errorMsg.setTextFill(Color.web("#b6aaff"));
+        errorMsg.setText("Conexión limpiada para " + selected + ". Puedes ingresar nuevos datos y reconectar.");
     }
 
     private void ejecutarSimulacion() {
         // Validar DB seleccionada
-        DatabaseType selected;
+        DatabaseType selected = getDatabaseTypeSeleccionada();
         errorMsg.setText("");
-        if (rbPostgres.isSelected()) selected = DatabaseType.POSTGRES;
-        else if (rbMySql.isSelected()) selected = DatabaseType.MYSQL;
-        else {
+        if (selected == null) {
             errorMsg.setText("Selecciona PostgreSQL o MySQL antes de simular");
             return;
         }
