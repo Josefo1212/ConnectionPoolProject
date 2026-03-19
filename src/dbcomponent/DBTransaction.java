@@ -18,10 +18,6 @@ public interface DBTransaction extends AutoCloseable {
         return false;
     }
 
-    /**
-     * Debe liberar recursos (ej. devolver la Connection al pool).
-     * Implementaciones suelen hacer rollback si queda activa y no se hizo commit.
-     */
     @Override
     void close() throws DBException;
 }

@@ -42,16 +42,44 @@ class Pool implements ConnectionPool {
         return DriverManager.getConnection(dbUrl, dbUser, dbPassword);
     }
 
+    private boolean isUsable(Connection connection) {
+        if (connection == null) return false;
+        try {
+            return !connection.isClosed() && connection.isValid(2);
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
     @Override
     public Connection getConnection() throws InterruptedException {
         var timeout = Config.getLong("POOL_TIMEOUT");
-        return connectionPool.poll(timeout, TimeUnit.MILLISECONDS);
+        Connection c = connectionPool.poll(timeout, TimeUnit.MILLISECONDS);
+        if (c == null) return null;
+        if (isUsable(c)) return c;
+
+        try {
+            return createConnection();
+        } catch (SQLException e) {
+            return null;
+        }
     }
 
     @Override
     public void releaseConnection(Connection connection) {
-        if (connection != null) {
+        if (connection == null) {
+            return;
+        }
+
+        if (isUsable(connection)) {
             connectionPool.offer(connection);
+            return;
+        }
+
+        // Si la conexión viene inválida/cerrada, intentamos reponer un slot del pool.
+        try {
+            connectionPool.offer(createConnection());
+        } catch (SQLException ignored) {
         }
     }
 

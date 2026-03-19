@@ -1,5 +1,6 @@
-import java.sql.DriverManager;
 import java.util.Random;
+import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -9,7 +10,6 @@ import javafx.scene.control.TextArea;
 import adapters.DatabaseType;
 import dbcomponent.DBComponent;
 import dbcomponent.DBComponentRegistry;
-import dbcomponent.DBQueries;
 import dbcomponent.DBQueryId;
 
 public class Cliente {
@@ -70,78 +70,13 @@ public class Cliente {
                             break;
                         }
                     }
-                    Thread.sleep(50);
+                    LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(50));
                 }
             } catch (Exception ignored) {}
         }, "FrenoThread");
         t.setDaemon(true);
         t.start();
         return t;
-    }
-
-    public void ejecutarSinPoolConEstadisticas() {
-        activarFreno(false);
-        var frenoThread = escucharFreno();
-        completadas.set(0);
-        exitosas.set(0);
-        fallidas.set(0);
-        var inicio = System.currentTimeMillis();
-        var tareas = new java.util.ArrayList<Thread>();
-
-        // Resolver credenciales desde la conexión ya creada en la UI
-        // (sin pool: DriverManager por petición, pero usando los mismos datos del componente).
-        final DBComponent component = requireComponent();
-        final String url = component.getUrl();
-        final String user = component.getUser();
-        final String pass = component.getPassword();
-        final String queriesResource = component.getQueriesResource();
-
-        // En modo SIN pool seguimos usando DriverManager por petición,
-        // pero el SQL se toma del repositorio de queries (no queda hardcodeado aquí).
-        final String sql;
-        try {
-            sql = DBQueries.loadFromClasspath(queriesResource).sql(Q_SELECT_ONE);
-        } catch (Exception e) {
-            throw new RuntimeException("No se pudo cargar el archivo de queries del adapter: " + e.getMessage(), e);
-        }
-
-        for (var i = 0; i < numeroPeticiones; i++) {
-            final var idx = i + 1;
-            Thread t = new Thread(() -> {
-                boolean exito = false;
-                try (var connection = DriverManager.getConnection(url, user, pass)) {
-                    if (estaFrenado()) {
-                        if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, "Frenada"));
-                        fallidas.incrementAndGet();
-                        return;
-                    }
-                    try (var stmt = connection.createStatement()) {
-                        var rs = stmt.executeQuery(sql);
-                        while (rs.next() && !estaFrenado()) {
-                            exito = true;
-                        }
-                    }
-                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, exito, exito ? "OK" : "Sin resultados"));
-                    if (exito) exitosas.incrementAndGet();
-                    else fallidas.incrementAndGet();
-                    Thread.sleep(new Random().nextInt(500));
-                } catch (Exception e) {
-                    if (colaEstadisticas != null) colaEstadisticas.add(new EstadisticaManager.Peticion(idx, false, e.getMessage()));
-                    fallidas.incrementAndGet();
-                } finally {
-                    completadas.incrementAndGet();
-                }
-            });
-            tareas.add(t);
-            t.start();
-        }
-        for (var t : tareas) {
-            try { t.join(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        }
-        activarFreno(true);
-        try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
-        var fin = System.currentTimeMillis();
-        if (outputArea != null) Platform.runLater(() -> outputArea.appendText("Tiempo total sin pool: " + (fin - inicio) + " ms\n"));
     }
 
     public void ejecutarConPoolConEstadisticas() {
@@ -192,6 +127,11 @@ public class Cliente {
         activarFreno(true);
         try { if (frenoThread != null) frenoThread.join(100); } catch (InterruptedException ignored) {}
         var fin = System.currentTimeMillis();
-        if (outputArea != null) Platform.runLater(() -> outputArea.appendText("Tiempo total con pool: " + (fin - inicio) + " ms\n"));
+        if (outputArea != null) Platform.runLater(() -> outputArea.appendText("Tiempo total simulación (pool): " + (fin - inicio) + " ms\n"));
+    }
+
+    // Alias semántico para reflejar que ahora solo existe ejecución con pool.
+    public void ejecutarSimulacionConEstadisticas() {
+        ejecutarConPoolConEstadisticas();
     }
 }

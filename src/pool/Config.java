@@ -4,12 +4,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Properties;
 
-/**
- * Configuración centralizada para el paquete pool.
- *
- * Nota: En Java NO se puede referenciar una clase del "default package" desde
- * un paquete con nombre (como `pool`). Por eso esta clase vive en `pool`.
- */
 public class Config {
     private static final Properties properties = new Properties();
 

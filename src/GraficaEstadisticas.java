@@ -6,26 +6,28 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 
 public class GraficaEstadisticas {
-    private final int exitosasSinPool, fallidasSinPool, exitosasConPool, fallidasConPool;
+    private final int exitosasPool;
+    private final int fallidasPool;
 
+    public GraficaEstadisticas(int exitosasPool, int fallidasPool) {
+        this.exitosasPool = exitosasPool;
+        this.fallidasPool = fallidasPool;
+    }
+
+    @Deprecated
     public GraficaEstadisticas(int es, int fs, int ec, int fc) {
-        this.exitosasSinPool = es;
-        this.fallidasSinPool = fs;
-        this.exitosasConPool = ec;
-        this.fallidasConPool = fc;
+        this(ec, fc);
     }
 
     public VBox crearGrafica() {
         HBox contenedorGraficas = new HBox(40);
         contenedorGraficas.setAlignment(Pos.CENTER);
 
-        PieChart pcSin = crearPie("Sin Pool", exitosasSinPool, fallidasSinPool);
-        PieChart pcCon = crearPie("Con Pool", exitosasConPool, fallidasConPool);
+        PieChart pcPool = crearPie("Pool", exitosasPool, fallidasPool);
 
-        HBox.setHgrow(pcSin, Priority.ALWAYS);
-        HBox.setHgrow(pcCon, Priority.ALWAYS);
+        HBox.setHgrow(pcPool, Priority.ALWAYS);
 
-        contenedorGraficas.getChildren().addAll(pcSin, pcCon);
+        contenedorGraficas.getChildren().add(pcPool);
 
         VBox layout = new VBox(10, contenedorGraficas);
         layout.setAlignment(Pos.CENTER);

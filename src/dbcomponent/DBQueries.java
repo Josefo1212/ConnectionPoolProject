@@ -3,6 +3,8 @@ package dbcomponent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -29,6 +31,48 @@ public final class DBQueries {
         this.queries = Collections.unmodifiableMap(new HashMap<>(queries));
     }
 
+    /**
+     * Carga queries desde una ubicación desacoplada.
+     * Soporta:
+     * - classpath:/ruta/al/archivo.ext
+     * - file:/ruta/al/archivo.ext
+     * - ruta relativa/absoluta de archivo del sistema
+     * - compatibilidad: "db/queries-*.properties|json" (classpath implícito)
+     */
+    public static DBQueries load(String location) throws DBException {
+        if (location == null || location.isBlank()) {
+            throw new DBException("location no puede ser null/vacío");
+        }
+
+        if (location.startsWith("classpath:")) {
+            String cp = location.substring("classpath:".length());
+            return loadFromClasspath(cp);
+        }
+
+        if (location.startsWith("file:")) {
+            String fp = location.substring("file:".length());
+            return loadFromFile(Path.of(fp));
+        }
+
+        // Compatibilidad con implementaciones previas: recurso classpath sin prefijo.
+        if (location.endsWith(".properties") || location.endsWith(".json") ||
+                location.endsWith(".yaml") || location.endsWith(".yml") || location.endsWith(".toml")) {
+            if (location.startsWith("/") || location.startsWith("db/")) {
+                return loadFromClasspath(location);
+            }
+            // Si no parece classpath, intentar filesystem.
+            Path path = Path.of(location);
+            if (Files.exists(path)) {
+                return loadFromFile(path);
+            }
+            return loadFromClasspath(location);
+        }
+
+        throw new DBException(DBException.Category.CONFIG, null,
+                "Ubicación de queries no soportada: " + location +
+                        " (usa classpath:/..., file:/... o ruta de archivo)");
+    }
+
     public static DBQueries loadFromClasspath(String resourcePath) throws DBException {
         if (resourcePath == null || resourcePath.isBlank()) {
             throw new DBException("resourcePath no puede ser null/vacío");
@@ -46,6 +90,21 @@ public final class DBQueries {
         } catch (IOException e) {
             throw new DBException(DBException.Category.CONFIG, null,
                     "Error cargando queries desde recurso: " + normalized, e);
+        }
+    }
+
+    public static DBQueries loadFromFile(Path filePath) throws DBException {
+        if (filePath == null) {
+            throw new DBException("filePath no puede ser null");
+        }
+
+        try {
+            String text = Files.readString(filePath, StandardCharsets.UTF_8);
+            Map<String, String> map = parseByExtension(filePath.toString(), text);
+            return new DBQueries(map);
+        } catch (IOException e) {
+            throw new DBException(DBException.Category.CONFIG, null,
+                    "Error cargando queries desde archivo: " + filePath, e);
         }
     }
 

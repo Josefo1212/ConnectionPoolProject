@@ -6,9 +6,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class PoolManager {
     private static final ConcurrentHashMap<String, PoolManager> INSTANCES = new ConcurrentHashMap<>();
+    private final String instanceKey;
     private final ConnectionPool pool;
 
     private PoolManager(String driverClassName, String url, String user, String password) {
+        this.instanceKey = driverClassName + "|" + url + "|" + user;
         try {
             pool = new Pool(driverClassName, url, user, password, Config.getInt("POOL_SIZE"));
         } catch (Exception e) {
@@ -16,12 +18,7 @@ public class PoolManager {
         }
     }
 
-    /**
-     * Obtiene (o crea) un PoolManager asociado a una configuración específica.
-     *
-     * Cada clave mantiene su propio pool interno, permitiendo instancias separadas
-     * para distintos adapters/configuraciones (ej. PostgreSQL y MySQL).
-     */
+
     public static PoolManager getInstance(String driverClassName, String url, String user, String password) {
         Objects.requireNonNull(driverClassName, "driverClassName");
         Objects.requireNonNull(url, "url");
@@ -58,5 +55,6 @@ public class PoolManager {
         if (pool instanceof Pool p) {
             p.closePool();
         }
+        INSTANCES.remove(instanceKey, this);
     }
 }

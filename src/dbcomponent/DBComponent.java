@@ -15,19 +15,10 @@ import java.util.Objects;
 
 import pool.PoolManager;
 
-/**
- * Fachada desacoplada de base de datos.
- *
- * Requisitos cubiertos:
- * - Pool interno: en cada operación NO transaccional se adquiere y se libera conexión.
- * - Desacoplado del driver: recibe driver/url/user/password en constructor.
- * - Sin SQL crudo público: expone métodos por ID (DBQueryId) y resuelve el SQL internamente.
- * - Queries predefinidas: se cargan desde un recurso .properties en classpath.
- */
 public final class DBComponent implements DBConnection {
     private final PoolManager poolManager;
     private final DBQueries queries;
-    private final String queriesResource;
+    private final String queriesLocation;
     private final boolean ownsPool;
 
     private final String url;
@@ -42,8 +33,8 @@ public final class DBComponent implements DBConnection {
                        String url,
                        String user,
                        String password,
-                       String queriesResource) throws DBException {
-        this(driverClassName, url, user, password, queriesResource, null);
+                       String queriesLocation) throws DBException {
+        this(driverClassName, url, user, password, queriesLocation, null);
     }
 
     /**
@@ -54,23 +45,23 @@ public final class DBComponent implements DBConnection {
                        String url,
                        String user,
                        String password,
-                       String queriesResource,
+                       String queriesLocation,
                        PoolManager poolManager) throws DBException {
         Objects.requireNonNull(driverClassName, "driverClassName");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(user, "user");
         Objects.requireNonNull(password, "password");
-        Objects.requireNonNull(queriesResource, "queriesResource");
+        Objects.requireNonNull(queriesLocation, "queriesLocation");
 
         this.url = url;
         this.user = user;
         this.password = password;
-        this.queriesResource = queriesResource;
+        this.queriesLocation = queriesLocation;
         this.ownsPool = (poolManager == null);
         this.poolManager = (poolManager != null)
                 ? poolManager
                 : PoolManager.getInstance(driverClassName, url, user, password);
-        this.queries = DBQueries.loadFromClasspath(queriesResource);
+        this.queries = DBQueries.load(queriesLocation);
         this.connected = true;
     }
 
@@ -89,8 +80,16 @@ public final class DBComponent implements DBConnection {
         return password;
     }
 
+    public String getQueriesLocation() {
+        return queriesLocation;
+    }
+
+    /**
+     * Compatibilidad con código existente.
+     */
+    @Deprecated
     public String getQueriesResource() {
-        return queriesResource;
+        return queriesLocation;
     }
 
     private Connection acquire() throws DBException {

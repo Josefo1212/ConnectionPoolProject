@@ -13,10 +13,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import adapters.DatabaseType;
-import adapters.DBAdapterFactory;
-import adapters.IDBAdapter;
-import dbcomponent.ConnectionConfig;
-import dbcomponent.DBComponent;
+import dbcomponent.DBComponentConnector;
 import dbcomponent.DBComponentRegistry;
 
 import java.util.concurrent.CountDownLatch;
@@ -28,11 +25,9 @@ import java.util.concurrent.TimeUnit;
 public class Interfaz extends Application {
     private final VBox panelGrafica = new VBox();
 
-    private final Label statsSinPool = new Label("0% Éxito");
-    private final Label statsConPool = new Label("0% Éxito");
+    private final Label statsPool = new Label("0% Éxito");
 
-    private final ProgressBar progressSin = new ProgressBar(0);
-    private final ProgressBar progressCon = new ProgressBar(0);
+    private final ProgressBar progressPool = new ProgressBar(0);
 
     private TextField txtPeticiones;
     private RadioButton rbPostgres, rbMySql;
@@ -44,14 +39,13 @@ public class Interfaz extends Application {
     private PasswordField txtPass;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final DBComponentConnector connector = new DBComponentConnector();
 
     // Progreso objetivo (lo que reporta la simulación)
-    private final DoubleProperty targetProgresoSin = new SimpleDoubleProperty(0);
-    private final DoubleProperty targetProgresoCon = new SimpleDoubleProperty(0);
+    private final DoubleProperty targetProgresoPool = new SimpleDoubleProperty(0);
 
     // Progreso mostrado (se interpola para verse fluido)
-    private final DoubleProperty shownProgresoSin = new SimpleDoubleProperty(0);
-    private final DoubleProperty shownProgresoCon = new SimpleDoubleProperty(0);
+    private final DoubleProperty shownProgresoPool = new SimpleDoubleProperty(0);
 
     private AnimationTimer smoothTimer;
 
@@ -210,17 +204,14 @@ public class Interfaz extends Application {
         titleRight.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         titleRight.setTextFill(Color.web("#00ffff"));
 
-        // Bindings de progreso (ahora se bindea al progreso 'shown' para suavizado)
-        progressSin.progressProperty().bind(shownProgresoSin);
-        progressCon.progressProperty().bind(shownProgresoCon);
+        // Binding de progreso al valor suavizado para animación fluida.
+        progressPool.progressProperty().bind(shownProgresoPool);
 
-        // Tarjetas KPI
+        // Tarjeta KPI principal (solo pool)
         HBox kpiBox = new HBox(15);
-        VBox cardSin = crearTarjetaKPI("Sin Pool", statsSinPool, progressSin, "#ff9966");
-        VBox cardCon = crearTarjetaKPI("Con Pool", statsConPool, progressCon, "#00ffff");
-        HBox.setHgrow(cardSin, Priority.ALWAYS);
-        HBox.setHgrow(cardCon, Priority.ALWAYS);
-        kpiBox.getChildren().addAll(cardSin, cardCon);
+        VBox cardPool = crearTarjetaKPI("Simulación con Pool", statsPool, progressPool, "#00ffff");
+        HBox.setHgrow(cardPool, Priority.ALWAYS);
+        kpiBox.getChildren().add(cardPool);
 
         // Área de Gráficas
         panelGrafica.setAlignment(Pos.CENTER);
@@ -247,7 +238,7 @@ public class Interfaz extends Application {
         btnFreno.setOnAction(_ -> {
             Cliente.activarFreno(true);
             errorMsg.setText("");
-            Platform.runLater(() -> statsSinPool.setText("Freno de emergencia activado"));
+            Platform.runLater(() -> statsPool.setText("Freno de emergencia activado"));
         });
 
         stage.setOnCloseRequest(_ -> {
@@ -268,8 +259,7 @@ public class Interfaz extends Application {
 
             @Override
             public void handle(long now) {
-                smoothStep(shownProgresoSin, targetProgresoSin, ALPHA);
-                smoothStep(shownProgresoCon, targetProgresoCon, ALPHA);
+                smoothStep(shownProgresoPool, targetProgresoPool, ALPHA);
             }
 
             private void smoothStep(DoubleProperty shown, DoubleProperty target, double alpha) {
@@ -378,44 +368,16 @@ public class Interfaz extends Application {
             return;
         }
 
-        IDBAdapter adapter;
         try {
-            adapter = DBAdapterFactory.adapter(selected);
-        } catch (Exception e) {
+            // Asegura que no se reutilice un pool anterior para la misma BD/credenciales.
+            DBComponentRegistry.clear(selected);
+            DBComponentConnector.ConnectResult result = connector.connect(selected, host, port, db, user, pass);
+            DBComponentRegistry.put(result.type(), result.component());
+            refrescarIndicadoresConexion();
             Platform.runLater(() -> {
-                errorMsg.setTextFill(Color.web("#ff4e8e"));
-                errorMsg.setText("No se pudo crear adapter: " + e.getMessage());
+                errorMsg.setTextFill(Color.web("#7CFC00"));
+                errorMsg.setText("Conectado correctamente a " + selected + "\n" + result.config().url());
             });
-            return;
-        }
-
-        final ConnectionConfig cfg = adapter.toConnectionConfig(host, port, db, user, pass);
-        final String queriesResource = adapter.queriesResource();
-
-        try {
-            DBComponent component = new DBComponent(
-                    cfg.driverClassName(),
-                    cfg.url(),
-                    cfg.user(),
-                    cfg.password(),
-                    queriesResource
-            );
-            // Intentar ejecutar una query predefinida para verificar conexión
-            try {
-                component.query(new dbcomponent.DBQueryId("usuario.selectOne"));
-                DBComponentRegistry.putReplacing(selected, component);
-                refrescarIndicadoresConexion();
-                Platform.runLater(() -> {
-                    errorMsg.setTextFill(Color.web("#7CFC00"));
-                    errorMsg.setText("Conectado correctamente a " + selected + "\n" + cfg.url());
-                });
-            } catch (Exception pingEx) {
-                refrescarIndicadoresConexion();
-                Platform.runLater(() -> {
-                    errorMsg.setTextFill(Color.web("#ff4e8e"));
-                    errorMsg.setText("Error conectando (ping): " + pingEx.getMessage());
-                });
-            }
         } catch (Exception e) {
             refrescarIndicadoresConexion();
             Platform.runLater(() -> {
@@ -515,10 +477,8 @@ public class Interfaz extends Application {
 
         // Reset UI
         Platform.runLater(() -> {
-            statsSinPool.setText("0% Éxito");
-            statsConPool.setText("0% Éxito");
-            targetProgresoSin.set(0);
-            targetProgresoCon.set(0);
+            statsPool.setText("0% Éxito");
+            targetProgresoPool.set(0);
             panelGrafica.getChildren().clear();
         });
 
@@ -529,50 +489,13 @@ public class Interfaz extends Application {
             try {
                 num = Integer.parseInt(txtPeticiones.getText());
             } catch (NumberFormatException ex) {
-                Platform.runLater(() -> statsSinPool.setText("Número inválido"));
+                Platform.runLater(() -> statsPool.setText("Número inválido"));
                 return;
             }
             if (num <= 0) {
-                Platform.runLater(() -> statsSinPool.setText("Ingresa un número mayor a 0"));
+                Platform.runLater(() -> statsPool.setText("Ingresa un número mayor a 0"));
                 return;
             }
-
-            // ================= SIN POOL =================
-            var colaSin = new java.util.concurrent.ConcurrentLinkedQueue<EstadisticaManager.Peticion>();
-            var managerSin = new EstadisticaManager(colaSin);
-            var hiloSin = new Thread(managerSin);
-            var cliente = new Cliente(num);
-            cliente.setEstadisticaQueue(colaSin);
-
-            final CountDownLatch terminadoSinPool = new CountDownLatch(1);
-            final ScheduledFuture<?>[] futureSin = new ScheduledFuture<?>[1];
-            futureSin[0] = scheduler.scheduleAtFixedRate(() -> {
-                int completadas = cliente.getCompletadas();
-                double progreso = completadas / (double) num;
-                Platform.runLater(() -> {
-                    targetProgresoSin.set(Math.min(progreso, 1.0));
-                    statsSinPool.setText("Sin pool: " + completadas + "/" + num + " | faltan " + Math.max(0, num - completadas));
-                });
-                if (completadas >= num || Cliente.estaFrenado()) {
-                    Platform.runLater(() -> targetProgresoSin.set(1.0));
-                    if (futureSin[0] != null) futureSin[0].cancel(false);
-                    if (terminadoSinPool.getCount() > 0) terminadoSinPool.countDown();
-                }
-            }, 0, 20, TimeUnit.MILLISECONDS);
-
-            hiloSin.start();
-            cliente.ejecutarSinPoolConEstadisticas();
-            managerSin.stop();
-            try { hiloSin.join(); } catch (InterruptedException ignored) {}
-            try { terminadoSinPool.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-
-            // Mostrar KPIs sin pool (éxitos/fallos + %)
-            Platform.runLater(() -> {
-                int ex = managerSin.getExitosas();
-                int fa = managerSin.getFallidas();
-                double exitoPct = managerSin.getPorcentajeExito();
-                statsSinPool.setText(String.format("Sin pool: %d ok / %d fail | %.2f%% éxito", ex, fa, exitoPct));
-            });
 
             // ================= CON POOL =================
             Cliente.activarFreno(false);
@@ -588,44 +511,44 @@ public class Interfaz extends Application {
                 int completadas = clientePool.getCompletadas();
                 double progreso = completadas / (double) num;
                 Platform.runLater(() -> {
-                    targetProgresoCon.set(Math.min(progreso, 1.0));
-                    statsConPool.setText("Con pool: " + completadas + "/" + num + " | faltan " + Math.max(0, num - completadas));
+                    targetProgresoPool.set(Math.min(progreso, 1.0));
+                    statsPool.setText("Pool: " + completadas + "/" + num + " | faltan " + Math.max(0, num - completadas));
                 });
                 if (completadas >= num || Cliente.estaFrenado()) {
-                    Platform.runLater(() -> targetProgresoCon.set(1.0));
+                    Platform.runLater(() -> targetProgresoPool.set(1.0));
                     if (futureCon[0] != null) futureCon[0].cancel(false);
                     if (terminadoConPool.getCount() > 0) terminadoConPool.countDown();
                 }
             }, 0, 20, TimeUnit.MILLISECONDS);
 
             hiloCon.start();
-            clientePool.ejecutarConPoolConEstadisticas();
+            clientePool.ejecutarSimulacionConEstadisticas();
             managerCon.stop();
             try { hiloCon.join(); } catch (InterruptedException ignored) {}
-            try { terminadoConPool.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            try {
+                boolean terminado = terminadoConPool.await(2, TimeUnit.SECONDS);
+                if (!terminado) {
+                    Platform.runLater(() -> errorMsg.setText("La simulación tardó más de lo esperado en finalizar."));
+                }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
 
             Platform.runLater(() -> {
                 int ex = managerCon.getExitosas();
                 int fa = managerCon.getFallidas();
                 double exitoPct = managerCon.getPorcentajeExito();
-                statsConPool.setText(String.format("Con pool: %d ok / %d fail | %.2f%% éxito", ex, fa, exitoPct));
+                statsPool.setText(String.format("Pool: %d ok / %d fail | %.2f%% éxito", ex, fa, exitoPct));
             });
 
             // Gráficas
-            Platform.runLater(() -> {
-                mostrarGraficaEstadisticas(
-                    managerSin.getExitosas(),
-                    managerSin.getFallidas(),
-                    managerCon.getExitosas(),
-                    managerCon.getFallidas()
-                );
-            });
+            Platform.runLater(() -> mostrarGraficaEstadisticas(managerCon.getExitosas(), managerCon.getFallidas()));
         }).start();
     }
 
-    private void mostrarGraficaEstadisticas(int exitosasSinPool, int fallidasSinPool, int exitosasConPool, int fallidasConPool) {
+    private void mostrarGraficaEstadisticas(int exitosasPool, int fallidasPool) {
         panelGrafica.getChildren().clear();
-        VBox grafica = new GraficaEstadisticas(exitosasSinPool, fallidasSinPool, exitosasConPool, fallidasConPool).crearGrafica();
+        VBox grafica = new GraficaEstadisticas(exitosasPool, fallidasPool).crearGrafica();
         panelGrafica.getChildren().add(grafica);
     }
 }

@@ -2,12 +2,6 @@ package adapters;
 
 import dbcomponent.ConnectionConfig;
 
-/**
- * Contrato para adapters de motor SQL.
- *
- * El DBComponent no debe conocer detalles de PostgreSQL/MySQL.
- * El adapter provee driver/URL y otros detalles de configuración.
- */
 public interface IDBAdapter {
     DatabaseType type();
 

@@ -2,12 +2,6 @@ package dbcomponent;
 
 import java.sql.SQLException;
 
-/**
- * Excepción genérica para el componente de BD.
- *
- * Mantiene constructores simples (message / message+cause) para compatibilidad,
- * pero añade metadata útil (categoría/código) para diagnóstico.
- */
 public class DBException extends Exception {
 
     public enum Category {
@@ -24,9 +18,6 @@ public class DBException extends Exception {
 
     private final Category category;
 
-    /**
-     * Código específico del motor (ej. SQLSTATE en PostgreSQL) o un código propio.
-     */
     private final String errorCode;
 
     // Metadata opcional (útil para diagnóstico)
