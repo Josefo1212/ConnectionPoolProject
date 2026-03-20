@@ -13,14 +13,6 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import adapters.DatabaseType;
-import dbcomponent.DBComponentConnector;
-import dbcomponent.DBComponentRegistry;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 public class Interfaz extends Application {
     private final VBox panelGrafica = new VBox();
@@ -38,8 +30,8 @@ public class Interfaz extends Application {
     private TextField txtHost, txtPort, txtDb, txtUser;
     private PasswordField txtPass;
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-    private final DBComponentConnector connector = new DBComponentConnector();
+    private final ConexionService conexionService = new ConexionService();
+    private final SimulacionService simulacionService = new SimulacionService();
 
     // Progreso objetivo (lo que reporta la simulación)
     private final DoubleProperty targetProgresoPool = new SimpleDoubleProperty(0);
@@ -236,16 +228,13 @@ public class Interfaz extends Application {
         btnConectar.setOnAction(_ -> conectarDB());
         btnLimpiarConexion.setOnAction(_ -> limpiarConexionActual());
         btnFreno.setOnAction(_ -> {
-            Cliente.activarFreno(true);
+            simulacionService.activarFreno(true);
             errorMsg.setText("");
             Platform.runLater(() -> statsPool.setText("Freno de emergencia activado"));
         });
 
         stage.setOnCloseRequest(_ -> {
-            try {
-                scheduler.shutdownNow();
-            } catch (Exception ignored) {
-            }
+            simulacionService.shutdown();
             if (smoothTimer != null) smoothTimer.stop();
         });
     }
@@ -370,13 +359,11 @@ public class Interfaz extends Application {
 
         try {
             // Asegura que no se reutilice un pool anterior para la misma BD/credenciales.
-            DBComponentRegistry.clear(selected);
-            DBComponentConnector.ConnectResult result = connector.connect(selected, host, port, db, user, pass);
-            DBComponentRegistry.put(result.type(), result.component());
+            ConexionService.ConnectionView result = conexionService.conectar(selected, host, port, db, user, pass);
             refrescarIndicadoresConexion();
             Platform.runLater(() -> {
                 errorMsg.setTextFill(Color.web("#7CFC00"));
-                errorMsg.setText("Conectado correctamente a " + selected + "\n" + result.config().url());
+                errorMsg.setText("Conectado correctamente a " + selected + "\n" + result.url());
             });
         } catch (Exception e) {
             refrescarIndicadoresConexion();
@@ -389,8 +376,8 @@ public class Interfaz extends Application {
 
     private void refrescarIndicadoresConexion() {
         Platform.runLater(() -> {
-            boolean pg = DBComponentRegistry.isConnected(DatabaseType.POSTGRES);
-            boolean my = DBComponentRegistry.isConnected(DatabaseType.MYSQL);
+            boolean pg = conexionService.isConnected(DatabaseType.POSTGRES);
+            boolean my = conexionService.isConnected(DatabaseType.MYSQL);
 
             estadoPostgres.setText("PostgreSQL: " + (pg ? "conectado" : "desconectado"));
             estadoPostgres.setTextFill(pg ? Color.web("#7CFC00") : Color.web("#ff4e8e"));
@@ -412,7 +399,7 @@ public class Interfaz extends Application {
         Platform.runLater(() -> {
             if (btnSimular == null) return;
             DatabaseType selected = getDatabaseTypeSeleccionada();
-            boolean habilitado = selected != null && DBComponentRegistry.isConnected(selected);
+            boolean habilitado = selected != null && conexionService.isConnected(selected);
             btnSimular.setDisable(!habilitado);
         });
     }
@@ -449,7 +436,7 @@ public class Interfaz extends Application {
             return;
         }
 
-        DBComponentRegistry.clear(selected);
+        conexionService.limpiarConexion(selected);
         refrescarIndicadoresConexion();
         actualizarEstadoSimular();
 
@@ -466,11 +453,8 @@ public class Interfaz extends Application {
             return;
         }
 
-        // Configurar DB para Cliente
-        Cliente.setDatabaseType(selected);
-
         // Debe existir conexión previa
-        if (!DBComponentRegistry.isConnected(selected)) {
+        if (!conexionService.isConnected(selected)) {
             errorMsg.setText("Primero conecta a " + selected + " (ingresa datos y presiona Conectar)");
             return;
         }
@@ -482,68 +466,31 @@ public class Interfaz extends Application {
             panelGrafica.getChildren().clear();
         });
 
-        new Thread(() -> {
-            Cliente.activarFreno(false);
+        int num;
+        try {
+            num = Integer.parseInt(txtPeticiones.getText());
+        } catch (NumberFormatException ex) {
+            statsPool.setText("Número inválido");
+            return;
+        }
 
-            int num;
-            try {
-                num = Integer.parseInt(txtPeticiones.getText());
-            } catch (NumberFormatException ex) {
-                Platform.runLater(() -> statsPool.setText("Número inválido"));
-                return;
-            }
-            if (num <= 0) {
-                Platform.runLater(() -> statsPool.setText("Ingresa un número mayor a 0"));
-                return;
-            }
-
-            // ================= CON POOL =================
-            Cliente.activarFreno(false);
-            var colaCon = new java.util.concurrent.ConcurrentLinkedQueue<EstadisticaManager.Peticion>();
-            var managerCon = new EstadisticaManager(colaCon);
-            var hiloCon = new Thread(managerCon);
-            var clientePool = new Cliente(num);
-            clientePool.setEstadisticaQueue(colaCon);
-
-            final CountDownLatch terminadoConPool = new CountDownLatch(1);
-            final ScheduledFuture<?>[] futureCon = new ScheduledFuture<?>[1];
-            futureCon[0] = scheduler.scheduleAtFixedRate(() -> {
-                int completadas = clientePool.getCompletadas();
-                double progreso = completadas / (double) num;
-                Platform.runLater(() -> {
-                    targetProgresoPool.set(Math.min(progreso, 1.0));
-                    statsPool.setText("Pool: " + completadas + "/" + num + " | faltan " + Math.max(0, num - completadas));
-                });
-                if (completadas >= num || Cliente.estaFrenado()) {
-                    Platform.runLater(() -> targetProgresoPool.set(1.0));
-                    if (futureCon[0] != null) futureCon[0].cancel(false);
-                    if (terminadoConPool.getCount() > 0) terminadoConPool.countDown();
-                }
-            }, 0, 20, TimeUnit.MILLISECONDS);
-
-            hiloCon.start();
-            clientePool.ejecutarSimulacionConEstadisticas();
-            managerCon.stop();
-            try { hiloCon.join(); } catch (InterruptedException ignored) {}
-            try {
-                boolean terminado = terminadoConPool.await(2, TimeUnit.SECONDS);
-                if (!terminado) {
-                    Platform.runLater(() -> errorMsg.setText("La simulación tardó más de lo esperado en finalizar."));
-                }
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-            }
-
-            Platform.runLater(() -> {
-                int ex = managerCon.getExitosas();
-                int fa = managerCon.getFallidas();
-                double exitoPct = managerCon.getPorcentajeExito();
-                statsPool.setText(String.format("Pool: %d ok / %d fail | %.2f%% éxito", ex, fa, exitoPct));
-            });
-
-            // Gráficas
-            Platform.runLater(() -> mostrarGraficaEstadisticas(managerCon.getExitosas(), managerCon.getFallidas()));
-        }).start();
+        try {
+            simulacionService.ejecutarConPool(
+                    selected,
+                    num,
+                    progress -> Platform.runLater(() -> {
+                        targetProgresoPool.set(progress.progreso());
+                        statsPool.setText("Pool: " + progress.completadas() + "/" + progress.total() + " | faltan " + Math.max(0, progress.total() - progress.completadas()));
+                    }),
+                    resultado -> Platform.runLater(() -> {
+                        statsPool.setText(String.format("Pool: %d ok / %d fail | %.2f%% éxito", resultado.exitosas(), resultado.fallidas(), resultado.porcentajeExito()));
+                        mostrarGraficaEstadisticas(resultado.exitosas(), resultado.fallidas());
+                    }),
+                    info -> Platform.runLater(() -> errorMsg.setText(info))
+            );
+        } catch (Exception e) {
+            errorMsg.setText(e.getMessage());
+        }
     }
 
     private void mostrarGraficaEstadisticas(int exitosasPool, int fallidasPool) {

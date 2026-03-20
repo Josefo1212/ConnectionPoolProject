@@ -19,8 +19,4 @@ public class MySQLAdapter implements IDBAdapter {
         return "jdbc:mysql://" + host + ":" + port + "/" + dbName;
     }
 
-    @Override
-    public String queriesResource() {
-        return "db/queries-mysql.json";
-    }
 }

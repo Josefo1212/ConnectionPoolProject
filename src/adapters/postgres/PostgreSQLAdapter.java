@@ -20,8 +20,4 @@ public class PostgreSQLAdapter implements IDBAdapter {
         return "jdbc:postgresql://" + host + ":" + port + "/" + dbName;
     }
 
-    @Override
-    public String queriesResource() {
-        return "db/queries-postgres.properties";
-    }
 }

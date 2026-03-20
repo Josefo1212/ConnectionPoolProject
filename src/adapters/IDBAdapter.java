@@ -15,10 +15,6 @@ public interface IDBAdapter {
      */
     String buildJdbcUrl(String host, int port, String dbName);
 
-    /**
-     * Recurso classpath que contiene queries predefinidas para este adapter.
-     */
-    String queriesResource();
 
     /**
      * Crea un ConnectionConfig listo para instanciar un DBComponent.
